@@ -26,6 +26,14 @@ Then check:
 
 ```bash
 curl http://127.0.0.1:18793/api/v1/status
+curl http://127.0.0.1:18793/api/v1/services
+curl -X POST http://127.0.0.1:18793/api/v1/services/hermes/check
+```
+
+CLI check:
+
+```bash
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse check-service hermes
 ```
 
 ## Docker

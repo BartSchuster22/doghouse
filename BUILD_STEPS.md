@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: staged implementation plan. No production watchdog cutover happens until explicitly approved.
+Status: Phase 0, Phase 1, and Phase 2 completed in repo. No production watchdog cutover happens until explicitly approved.
 
 ## Phase 0 — repository and skeleton
 
@@ -15,29 +15,37 @@ Status: staged implementation plan. No production watchdog cutover happens until
 9. Verify syntax/imports.
 10. Commit and push Phase 0 skeleton.
 
-## Phase 1 — service-watchdog report-only MVP
+## Phase 1 — service registry MVP
 
 1. Add file-based service registry from `config/services.d/*.yaml`.
-2. Add HTTP endpoint checker.
-3. Add service classification model.
-4. Add report-only decision engine.
+2. Add service config validation models.
+3. Add service listing/status endpoints.
+4. Add Hermes/OpenClaw config examples.
+5. Verify restart/kill remain disabled.
+6. Commit and push Phase 1.
+
+## Phase 2 — HTTP checker and classifications
+
+1. Add HTTP endpoint checker for `/live`, `/ready`, and `/health`.
+2. Add service classification model.
+3. Add report-only decision engine.
+4. Add consecutive liveness failure counter.
 5. Add atomic JSON state writer.
 6. Add manual check endpoint: `POST /api/v1/services/{service_id}/check`.
-7. Add service listing/status endpoints.
-8. Add Hermes/OpenClaw config examples.
-9. Verify no restart/kill action exists.
-10. Commit and push Phase 1.
+7. Add CLI check command: `doghouse check-service [service_id]`.
+8. Verify no restart/kill action exists.
+9. Commit and push Phase 2.
 
-## Phase 2 — incidents and diagnostics
+## Phase 3 — incidents and diagnostics
 
 1. Add incident JSON/Markdown writer.
 2. Add dedupe window.
 3. Add pre-action diagnostics collection in report-only mode.
 4. Add recent incidents API.
 5. Add tests for incident output and redaction.
-6. Commit and push Phase 2.
+6. Commit and push Phase 3.
 
-## Phase 3 — devtask-watchdog MVP
+## Phase 4 — devtask-watchdog MVP
 
 1. Add active-work API client.
 2. Add heartbeat-file reader.
@@ -45,27 +53,27 @@ Status: staged implementation plan. No production watchdog cutover happens until
 4. Add checkpoint writer.
 5. Add devtask API endpoints.
 6. Keep kill/interrupt disabled.
-7. Commit and push Phase 3.
+7. Commit and push Phase 4.
 
-## Phase 4 — watchdog-audit MVP
+## Phase 5 — watchdog-audit MVP
 
 1. Add scheduler freshness checks.
 2. Add policy validation checks.
 3. Add state/log/incident writability checks.
 4. Add old-watchdog migration-state checks.
 5. Add audit API endpoint.
-6. Commit and push Phase 4.
+6. Commit and push Phase 5.
 
-## Phase 5 — host executor
+## Phase 6 — host executor
 
 1. Add small whitelist-only host executor.
 2. Add local socket/API client.
 3. Add executor policy file.
 4. Add tests proving unknown actions are rejected.
 5. Keep restart disabled by default.
-6. Commit and push Phase 5.
+6. Commit and push Phase 6.
 
-## Phase 6 — shadow mode
+## Phase 7 — shadow mode
 
 1. Run Doghouse beside current watchdog.
 2. Compare old watchdog behavior with v2 report-only decisions.
@@ -73,7 +81,7 @@ Status: staged implementation plan. No production watchdog cutover happens until
 4. Fix mismatches.
 5. Do not cut over yet.
 
-## Phase 7 — service-by-service cutover
+## Phase 8 — service-by-service cutover
 
 1. Pick one service.
 2. Verify rollback command.
