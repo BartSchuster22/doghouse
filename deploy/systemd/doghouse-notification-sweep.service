@@ -1,0 +1,9 @@
+[Unit]
+Description=Doghouse notification status sweep
+After=network-online.target
+
+[Service]
+Type=oneshot
+Environment=DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml
+WorkingDirectory=/opt/doghouse
+ExecStart=/opt/doghouse/.venv/bin/python -m doghouse.main notify --source notification_sweep --severity info --title "Doghouse notification sweep" --summary "Notification layer sweep completed" --status ok

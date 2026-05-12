@@ -198,6 +198,34 @@ Status: Phase 0 through Phase 20 implemented in repo. Hermes and OpenClaw are cu
 5. Extend audit checks for v2 executor hardening policy.
 6. Add tests for destructive-action gating and audit hash output.
 
+## Phase 24 — Devtask heartbeat integration
+
+1. Add `doghouse devtask-heartbeat` for writing normalized heartbeat files.
+2. Add heartbeat submission/prune APIs under `/api/v1/devtasks/heartbeats`.
+3. Normalize heartbeat schema to `doghouse.devtask.heartbeat/v1` with `heartbeat_hash`.
+4. Keep devtask watchdog report-only with kill/interrupt disabled.
+
+## Phase 25 — Audit quality upgrade
+
+1. Add top-level audit quality score, issue counts, and recommendations.
+2. Add executor audit-chain inspection.
+3. Add notification layer health checks.
+4. Keep audit output persisted under `state_dir/audit/last-audit.json`.
+
+## Phase 26 — Notification layer
+
+1. Add local-outbox notifications under `state_dir/notifications/`.
+2. Add CLI commands `doghouse notification-status` and `doghouse notify`.
+3. Add APIs `/api/v1/notifications/status`, `/send`, and `/test`.
+4. Add systemd templates for optional notification sweep.
+5. External delivery remains disabled unless explicitly approved later.
+
+## Phase 27 — Operator runbook and docs finalization
+
+1. Add `docs/phase-24-27-evidence.md`.
+2. Update operator docs with devtask heartbeat, audit quality, and notification commands.
+3. Re-run compile, tests, live Doghouse checks, audit, QA gate, and git clean verification.
+
 ## Safety defaults
 
 - API binds to `127.0.0.1`.

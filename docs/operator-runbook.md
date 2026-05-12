@@ -124,3 +124,29 @@ systemctl disable --now doghouse-check@hermes.timer doghouse-check@openclaw.time
 - Soak state: `/srv/shared-memory/state/watchdog-v2/soak/latest-soak-report.json`
 - Incidents: `/srv/shared-memory/incidents/open`
 - Executor audit log: `/srv/shared-memory/logs/watchdog-v2/executor-audit.jsonl`
+
+## Phase 24-27 additions
+
+Devtask heartbeat write path:
+
+```bash
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse devtask-heartbeat task-id --status active --progress "working" --pid $$
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse check-devtasks
+```
+
+Notification layer:
+
+```bash
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse notification-status
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse notify --source operator --severity warning --title "Test" --summary "local outbox test" --force
+```
+
+Notification state is local-only by default: `/srv/shared-memory/state/watchdog-v2/notifications/outbox.jsonl`. Do not enable external delivery without explicit operator approval.
+
+Audit quality:
+
+```bash
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse audit
+```
+
+The audit now includes a top-level `quality` object with score, issue counts, and recommendations.

@@ -23,3 +23,11 @@ safety:
 host_executor:
   enabled: true
   policy_path: /opt/doghouse/config/executor-policy.yaml
+
+notifications:
+  enabled: true
+  mode: local_outbox
+  min_severity: warning
+  outbox_path: /srv/shared-memory/state/watchdog-v2/notifications/outbox.jsonl
+  latest_path: /srv/shared-memory/state/watchdog-v2/notifications/latest.json
+  dedupe_window_sec: 1800

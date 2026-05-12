@@ -6,14 +6,34 @@ from pathlib import Path
 from fastapi import APIRouter, Query
 
 from doghouse.common.config import load_config_from_env
-from doghouse.devtask_watchdog.checker import check_devtasks, read_heartbeats
+from pydantic import BaseModel
+
+from doghouse.devtask_watchdog.checker import check_devtasks, prune_completed_heartbeats, read_heartbeats, write_heartbeat
 
 router = APIRouter(prefix="/api/v1/devtasks", tags=["devtasks"])
+
+
+class HeartbeatRequest(BaseModel):
+    task_id: str
+    status: str = "active"
+    progress: str | None = None
+    pid: int | None = None
+    metadata: dict = {}
 
 
 @router.get("/heartbeats")
 def list_heartbeats() -> list[dict]:
     return read_heartbeats(load_config_from_env())
+
+
+@router.post("/heartbeats")
+def submit_heartbeat(req: HeartbeatRequest) -> dict:
+    return write_heartbeat(load_config_from_env(), req.task_id, status=req.status, progress=req.progress, pid=req.pid, metadata=req.metadata)
+
+
+@router.post("/heartbeats/prune")
+def prune_heartbeats(max_age_sec: int = Query(default=86400)) -> dict:
+    return prune_completed_heartbeats(load_config_from_env(), max_age_sec=max_age_sec)
 
 
 @router.get("/status")

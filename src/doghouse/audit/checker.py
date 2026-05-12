@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +11,7 @@ from typing import Any
 from doghouse.common.config import DoghouseConfig, load_config_from_env
 from doghouse.common.service_config import ServiceConfig, load_services
 from doghouse.host_executor.policy import load_executor_policy
+from doghouse.notifications.notifier import notification_status
 from doghouse.service_watchdog.state import state_file, utc_now_iso
 
 
@@ -200,6 +202,80 @@ def check_shadow_state(config: DoghouseConfig) -> dict[str, Any]:
         return {"status": "attention", "state_path": str(path), "error": f"{type(exc).__name__}: {exc}"}
 
 
+
+def check_executor_audit_chain(config: DoghouseConfig) -> dict[str, Any]:
+    policy = load_executor_policy(config.host_executor.policy_path)
+    path = Path(policy.audit_log_path)
+    if not path.exists():
+        return {"status": "ok", "audit_log_path": str(path), "records_checked": 0, "reason": "audit log not created yet"}
+    issues = []
+    records = []
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()[-200:]
+    except OSError as exc:
+        return {"status": "attention", "audit_log_path": str(path), "error": f"{type(exc).__name__}: {exc}"}
+    previous_hash = None
+    hash_chain_started = False
+    legacy_records = 0
+    for idx, line in enumerate(lines):
+        try:
+            rec = json.loads(line)
+        except json.JSONDecodeError as exc:
+            issues.append({"line_offset": idx, "severity": "warning", "reason": f"invalid json: {exc}"})
+            continue
+        records.append(rec)
+        if policy.audit_include_hash_chain:
+            if not rec.get("audit_hash"):
+                if hash_chain_started:
+                    issues.append({"line_offset": idx, "severity": "warning", "reason": "missing audit_hash after hash chain started"})
+                else:
+                    legacy_records += 1
+                continue
+            hash_chain_started = True
+            if previous_hash is not None and rec.get("previous_audit_hash") != previous_hash:
+                issues.append({"line_offset": idx, "severity": "warning", "reason": "previous_audit_hash does not match preceding record"})
+            previous_hash = rec.get("audit_hash")
+    destructive_without_reason = [r for r in records if r.get("destructive") and r.get("executed") and not r.get("request_reason")]
+    if destructive_without_reason:
+        issues.append({"severity": "critical", "reason": "executed destructive action without recorded request_reason", "count": len(destructive_without_reason)})
+    return {"status": "ok" if not issues else "attention", "audit_log_path": str(path), "records_checked": len(records), "legacy_records_without_hash": legacy_records, "issues": issues, "last_audit_hash": previous_hash}
+
+
+def check_notifications(config: DoghouseConfig) -> dict[str, Any]:
+    status = notification_status(config)
+    issues = []
+    if not status.get("enabled"):
+        issues.append({"severity": "warning", "reason": "notifications disabled"})
+    outbox_parent = Path(status["outbox_path"]).parent
+    try:
+        outbox_parent.mkdir(parents=True, exist_ok=True)
+        probe = outbox_parent / ".doghouse-notification-probe"
+        probe.write_text("ok\n", encoding="utf-8")
+        probe.unlink(missing_ok=True)
+    except OSError as exc:
+        issues.append({"severity": "critical", "reason": f"notification outbox not writable: {type(exc).__name__}: {exc}"})
+    return {"status": "ok" if not issues else "attention", **status, "issues": issues}
+
+
+def summarize_audit_quality(sections: dict[str, Any]) -> dict[str, Any]:
+    critical = 0
+    warnings = 0
+    recommendations: list[str] = []
+    for name, section in sections.items():
+        if not isinstance(section, dict):
+            continue
+        if section.get("status") not in {"ok", "inventory"}:
+            warnings += 1
+            recommendations.append(f"Review audit section {name}")
+        for key in ("issues", "violations"):
+            for issue in section.get(key, []) if isinstance(section.get(key), list) else []:
+                if issue.get("severity") == "critical":
+                    critical += 1
+                else:
+                    warnings += 1
+    score = max(0.0, 10.0 - critical * 2.0 - warnings * 0.5)
+    return {"score": score, "critical_count": critical, "warning_count": warnings, "recommendations": recommendations[:20], "status": "ok" if score >= 8.0 and critical == 0 else "attention"}
+
 def run_audit(config: DoghouseConfig | None = None, services_dir: str | Path | None = None, persist: bool = True) -> dict[str, Any]:
     config = config or load_config_from_env()
     root = Path(services_dir or ("/opt/doghouse/config/services.d" if Path("/opt/doghouse/config/services.d").exists() else "config/services.d"))
@@ -211,11 +287,14 @@ def run_audit(config: DoghouseConfig | None = None, services_dir: str | Path | N
         "systemd_units": check_systemd_units(services),
         "old_watchdog_migration": check_old_watchdog_migration(services),
         "executor_policy": check_executor_policy(config, services),
+        "executor_audit_chain": check_executor_audit_chain(config),
         "devtask_state": check_devtask_state(config),
         "shadow_state": check_shadow_state(config),
+        "notifications": check_notifications(config),
     }
-    status = "ok" if all(section.get("status") in {"ok", "inventory"} for section in sections.values()) else "attention"
-    result = {"checked_at": utc_now_iso(), "mode": "report-only", "status": status, "sections": sections}
+    quality = summarize_audit_quality(sections)
+    status = "ok" if all(section.get("status") in {"ok", "inventory"} for section in sections.values()) and quality.get("status") == "ok" else "attention"
+    result = {"checked_at": utc_now_iso(), "mode": "report-only", "status": status, "quality": quality, "sections": sections}
     if persist:
         _atomic_write(Path(config.paths.state_dir) / "audit" / "last-audit.json", result)
     return result

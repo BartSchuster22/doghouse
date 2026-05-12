@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -60,6 +61,60 @@ def fetch_active_work(url: str | None, timeout_sec: int = 5) -> dict[str, Any]:
         return {"ok": False, "url": url, "error": f"{type(exc).__name__}: {exc}", "tasks": []}
 
 
+
+def normalize_heartbeat(task: dict[str, Any], source_path: str | None = None) -> dict[str, Any]:
+    """Normalize external heartbeat schemas into Doghouse's task heartbeat contract."""
+    task_id = str(task.get("task_id") or task.get("id") or task.get("session_id") or "unknown-task")
+    nowish = task.get("last_seen_at") or task.get("updated_at") or task.get("heartbeat_at") or task.get("timestamp")
+    normalized = dict(task)
+    normalized["task_id"] = task_id
+    if nowish and not normalized.get("last_seen_at"):
+        normalized["last_seen_at"] = nowish
+    normalized.setdefault("status", "active")
+    normalized.setdefault("schema", "doghouse.devtask.heartbeat/v1")
+    if source_path:
+        normalized["heartbeat_path"] = source_path
+    normalized["heartbeat_hash"] = hashlib.sha256(json.dumps(normalized, sort_keys=True, default=str).encode()).hexdigest()[:24]
+    return normalized
+
+
+def write_heartbeat(config: DoghouseConfig, task_id: str, status: str = "active", progress: str | None = None, pid: int | None = None, metadata: dict[str, Any] | None = None) -> dict[str, Any]:
+    payload: dict[str, Any] = {
+        "task_id": task_id,
+        "status": status,
+        "last_seen_at": utc_now_iso(),
+        "updated_at": utc_now_iso(),
+        "progress": progress,
+        "pid": pid,
+        "metadata": metadata or {},
+    }
+    heartbeat = normalize_heartbeat(payload)
+    path = heartbeat_dir(config) / f"{''.join(ch if ch.isalnum() or ch in ('-', '_', '.') else '_' for ch in task_id)[:120]}.json"
+    _atomic_write(path, heartbeat)
+    heartbeat["heartbeat_path"] = str(path)
+    return heartbeat
+
+
+def prune_completed_heartbeats(config: DoghouseConfig, max_age_sec: int = 86400) -> dict[str, Any]:
+    now = datetime.now(timezone.utc)
+    removed: list[str] = []
+    kept = 0
+    for item in read_heartbeats(config):
+        status = str(item.get("status") or "")
+        if status not in {"completed", "cancelled", "failed"}:
+            kept += 1
+            continue
+        last_seen = _parse_iso(str(item.get("last_seen_at") or item.get("updated_at") or ""))
+        if last_seen and (now - last_seen).total_seconds() >= max_age_sec and item.get("heartbeat_path"):
+            try:
+                Path(str(item["heartbeat_path"])).unlink(missing_ok=True)
+                removed.append(str(item["heartbeat_path"]))
+            except OSError:
+                kept += 1
+        else:
+            kept += 1
+    return {"removed": removed, "removed_count": len(removed), "kept_count": kept}
+
 def read_heartbeats(config: DoghouseConfig) -> list[dict[str, Any]]:
     root = heartbeat_dir(config)
     if not root.exists():
@@ -71,8 +126,7 @@ def read_heartbeats(config: DoghouseConfig) -> list[dict[str, Any]]:
         except (OSError, json.JSONDecodeError) as exc:
             items.append({"task_id": path.stem, "heartbeat_path": str(path), "status": "unreadable", "error": f"{type(exc).__name__}: {exc}"})
             continue
-        data.setdefault("task_id", path.stem)
-        data["heartbeat_path"] = str(path)
+        data = normalize_heartbeat(data, str(path))
         items.append(data)
     return items
 
@@ -134,12 +188,13 @@ def merge_tasks(active_work_results: list[dict[str, Any]], heartbeats: list[dict
         for task in source.get("tasks", []):
             if isinstance(task, dict):
                 task_id = str(task.get("task_id") or task.get("id") or len(tasks))
-                task["task_id"] = task_id
+                task = normalize_heartbeat(task)
+                task_id = str(task.get("task_id") or task_id)
                 task["source"] = "active_work_api"
                 tasks[task_id] = task
     for task in heartbeats:
         task_id = str(task.get("task_id") or task.get("id") or len(tasks))
-        tasks[task_id] = {**tasks.get(task_id, {}), **task, "task_id": task_id, "source": "heartbeat_file"}
+        tasks[task_id] = normalize_heartbeat({**tasks.get(task_id, {}), **task, "task_id": task_id, "source": "heartbeat_file"})
     return tasks
 
 

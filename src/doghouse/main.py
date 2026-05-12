@@ -9,7 +9,8 @@ from doghouse.api.app import create_app
 from doghouse.audit.checker import run_audit
 from doghouse.common.config import load_config_from_env
 from doghouse.common.service_config import load_services
-from doghouse.devtask_watchdog.checker import check_devtasks
+from doghouse.devtask_watchdog.checker import check_devtasks, prune_completed_heartbeats, write_heartbeat
+from doghouse.notifications.notifier import notification_status, notify_event
 from doghouse.host_executor.executor import execute_host_action
 from doghouse.evidence.daily import generate_daily_evidence
 from doghouse.qa.gate import run_qa_gate
@@ -40,6 +41,21 @@ def main() -> int:
     check.add_argument("service_id", nargs="?")
     devtasks = sub.add_parser("check-devtasks")
     devtasks.add_argument("--active-work-url", default=None)
+    heartbeat = sub.add_parser("devtask-heartbeat")
+    heartbeat.add_argument("task_id")
+    heartbeat.add_argument("--status", default="active")
+    heartbeat.add_argument("--progress", default=None)
+    heartbeat.add_argument("--pid", type=int, default=None)
+    prune_hb = sub.add_parser("prune-devtask-heartbeats")
+    prune_hb.add_argument("--max-age-sec", type=int, default=86400)
+    sub.add_parser("notification-status")
+    notify = sub.add_parser("notify")
+    notify.add_argument("--source", default="operator")
+    notify.add_argument("--severity", default="warning")
+    notify.add_argument("--title", required=True)
+    notify.add_argument("--summary", required=True)
+    notify.add_argument("--status", default=None)
+    notify.add_argument("--force", action="store_true")
     sub.add_parser("audit")
     executor = sub.add_parser("executor")
     executor.add_argument("service_id")
@@ -65,6 +81,18 @@ def main() -> int:
         return run_check(args.service_id)
     if args.command == "check-devtasks":
         print(json.dumps(check_devtasks(load_config_from_env(), active_work_url=args.active_work_url, persist=True), indent=2, sort_keys=True))
+        return 0
+    if args.command == "devtask-heartbeat":
+        print(json.dumps(write_heartbeat(load_config_from_env(), args.task_id, status=args.status, progress=args.progress, pid=args.pid), indent=2, sort_keys=True))
+        return 0
+    if args.command == "prune-devtask-heartbeats":
+        print(json.dumps(prune_completed_heartbeats(load_config_from_env(), max_age_sec=args.max_age_sec), indent=2, sort_keys=True))
+        return 0
+    if args.command == "notification-status":
+        print(json.dumps(notification_status(load_config_from_env()), indent=2, sort_keys=True))
+        return 0
+    if args.command == "notify":
+        print(json.dumps(notify_event(args.source, args.severity, args.title, args.summary, status=args.status, config=load_config_from_env(), force=args.force), indent=2, sort_keys=True))
         return 0
     if args.command == "audit":
         print(json.dumps(run_audit(load_config_from_env(), persist=True), indent=2, sort_keys=True))
