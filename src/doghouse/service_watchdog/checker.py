@@ -7,6 +7,8 @@ import httpx
 
 from doghouse.common.config import DoghouseConfig, load_config_from_env
 from doghouse.common.service_config import ServiceConfig
+from doghouse.service_watchdog.diagnostics import collect_diagnostics
+from doghouse.service_watchdog.incidents import maybe_write_incident
 from doghouse.service_watchdog.state import (
     EndpointCheckResult,
     ServiceCheckResult,
@@ -110,6 +112,10 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
         if name in {"live", "ready", "health"}
     }
     classification, reason, failures = classify(service, endpoint_results, previous)
+    diagnostics = None
+    incident = None
+    if classification not in {"healthy", "not_configured"}:
+        diagnostics = collect_diagnostics(service)
     result = ServiceCheckResult(
         service_id=service.service_id,
         display_name=service.display_name,
@@ -124,7 +130,11 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
         endpoints=endpoint_results,
         previous_state_path=str(path) if path.exists() else None,
         state_path=str(path),
+        diagnostics=diagnostics,
     )
     if persist:
+        incident = maybe_write_incident(service, result, config, diagnostics)
+        if incident is not None:
+            result.incident = incident
         write_state_atomic(path, result.model_dump(mode="json"))
     return result

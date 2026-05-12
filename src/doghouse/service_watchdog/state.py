@@ -31,6 +31,8 @@ class ServiceCheckResult(BaseModel):
     restart_enabled: bool
     kill_enabled: bool
     endpoints: dict[str, EndpointCheckResult] = Field(default_factory=dict)
+    diagnostics: dict[str, Any] | None = None
+    incident: dict[str, Any] | None = None
     previous_state_path: str | None = None
     state_path: str | None = None
 

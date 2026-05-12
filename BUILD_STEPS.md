@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: Phase 0, Phase 1, and Phase 2 completed in repo. No production watchdog cutover happens until explicitly approved.
+Status: Phase 0 through Phase 5 completed in repo. No production watchdog cutover happens until explicitly approved.
 
 ## Phase 0 — repository and skeleton
 

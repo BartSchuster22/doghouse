@@ -8,7 +8,7 @@ Initial posture:
 - local-only API
 - no restart capability
 - no kill capability
-- no host executor in Phase 0
+- no host executor before Phase 6
 - current production watchdog remains untouched
 
 See `BUILD_STEPS.md` for the staged implementation plan.
@@ -28,12 +28,17 @@ Then check:
 curl http://127.0.0.1:18793/api/v1/status
 curl http://127.0.0.1:18793/api/v1/services
 curl -X POST http://127.0.0.1:18793/api/v1/services/hermes/check
+curl http://127.0.0.1:18793/api/v1/incidents
+curl -X POST http://127.0.0.1:18793/api/v1/devtasks/check
+curl -X POST http://127.0.0.1:18793/api/v1/audit/run
 ```
 
 CLI check:
 
 ```bash
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse check-service hermes
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse check-devtasks
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse audit
 ```
 
 ## Docker
