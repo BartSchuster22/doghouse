@@ -174,6 +174,30 @@ Status: Phase 0 through Phase 20 implemented in repo. Hermes and OpenClaw are cu
 3. Mark Hermes `/live` and `/ready` as legacy fallback to `/health` until Hermes exposes native endpoints.
 4. Document split endpoint state in `docs/phase-17-20-evidence.md`.
 
+## Phase 21 — OpenClaw/Alice repair and readiness
+
+1. Add `doghouse openclaw-readiness`.
+2. Add `/api/v1/readiness/openclaw` and `/api/v1/readiness/openclaw/run`.
+3. Verify OpenClaw service, native endpoints, policy, and timer state.
+4. Persist readiness evidence under `state_dir/readiness/openclaw.json`.
+
+## Phase 22 — OpenClaw/Alice cutover
+
+1. Verify OpenClaw Doghouse check is healthy.
+2. Keep `report_only: false`, `restart_enabled: true`, and `kill_enabled: false`.
+3. Keep `doghouse-check@openclaw.timer` active.
+4. Disable `watchdog-openclaw.timer`.
+5. Document rollback command.
+
+## Phase 23 — Host executor hardening v2
+
+1. Require operator reason for destructive actions.
+2. Require confirmation token for destructive actions.
+3. Return required token in dry-run/deny output.
+4. Add executor audit hash chain.
+5. Extend audit checks for v2 executor hardening policy.
+6. Add tests for destructive-action gating and audit hash output.
+
 ## Safety defaults
 
 - API binds to `127.0.0.1`.

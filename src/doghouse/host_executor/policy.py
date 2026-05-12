@@ -23,10 +23,14 @@ class ExecutorPolicy(BaseModel):
     restart_requires_service_policy: bool = True
     require_absolute_argv0: bool = True
     allowed_binaries: list[str] = Field(default_factory=lambda: ["/bin/systemctl", "/usr/bin/systemctl"])
-    unit_name_regex: str = r"^[A-Za-z0-9_.@\\-]+\\.service$"
+    unit_name_regex: str = r"^[A-Za-z0-9_.@\-]+\.service$"
     audit_log_path: str = "/srv/shared-memory/logs/watchdog-v2/executor-audit.jsonl"
     restart_cooldown_sec: int = 300
     max_output_chars: int = 4000
+    require_reason_for_destructive: bool = True
+    min_destructive_reason_chars: int = 12
+    require_confirmation_token_for_destructive: bool = True
+    audit_include_hash_chain: bool = True
 
 
 def default_policy() -> ExecutorPolicy:

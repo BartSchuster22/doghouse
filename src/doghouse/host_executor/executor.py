@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import subprocess
@@ -29,6 +30,10 @@ class ExecutorResult:
     finished_at: str | None = None
     audit_path: str | None = None
     destructive: bool = False
+    request_reason: str | None = None
+    confirmation_required: str | None = None
+    audit_hash: str | None = None
+    previous_audit_hash: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -45,6 +50,10 @@ class ExecutorResult:
             "finished_at": self.finished_at,
             "audit_path": self.audit_path,
             "destructive": self.destructive,
+            "request_reason": self.request_reason,
+            "confirmation_required": self.confirmation_required,
+            "audit_hash": self.audit_hash,
+            "previous_audit_hash": self.previous_audit_hash,
         }
 
 
@@ -62,10 +71,32 @@ def _safe_env() -> dict[str, str]:
     return {"PATH": "/usr/sbin:/usr/bin:/sbin:/bin", "LANG": "C.UTF-8", "LC_ALL": "C.UTF-8"}
 
 
+def _last_audit_hash(path: Path) -> str | None:
+    if not path.exists():
+        return None
+    try:
+        for line in reversed(path.read_text(encoding="utf-8").splitlines()[-200:]):
+            try:
+                rec = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if rec.get("audit_hash"):
+                return str(rec["audit_hash"])
+    except OSError:
+        return None
+    return None
+
+
 def _append_audit(policy: ExecutorPolicy, result: ExecutorResult, argv: list[str] | None = None) -> None:
     path = Path(policy.audit_log_path)
     path.parent.mkdir(parents=True, exist_ok=True)
+    previous = _last_audit_hash(path) if policy.audit_include_hash_chain else None
+    result.previous_audit_hash = previous
     record = result.as_dict() | {"recorded_at": utc_now_iso(), "argv": argv or []}
+    if policy.audit_include_hash_chain:
+        payload = json.dumps(record | {"audit_hash": None}, sort_keys=True, separators=(",", ":"))
+        result.audit_hash = hashlib.sha256(((previous or "") + payload).encode("utf-8")).hexdigest()
+        record = result.as_dict() | {"recorded_at": record["recorded_at"], "argv": argv or []}
     with path.open("a", encoding="utf-8") as fh:
         fh.write(json.dumps(record, sort_keys=True) + "\n")
     result.audit_path = str(path)
@@ -98,7 +129,11 @@ def _last_restart_age_sec(policy: ExecutorPolicy, service_id: str) -> int | None
     return int((now - last).total_seconds())
 
 
-def validate_executor_request(action: str, service: ServiceConfig, policy: ExecutorPolicy, dry_run: bool) -> tuple[bool, str | None, str | None, list[str] | None, bool]:
+def destructive_confirmation_token(service_id: str, action: str) -> str:
+    return f"EXECUTE:{service_id}:{action}"
+
+
+def validate_executor_request(action: str, service: ServiceConfig, policy: ExecutorPolicy, dry_run: bool, reason: str | None = None, confirmation_token: str | None = None) -> tuple[bool, str | None, str | None, list[str] | None, bool]:
     unit = _unit_for(service, policy)
     if not policy.enabled:
         return False, "host executor disabled by policy", unit, None, False
@@ -122,6 +157,12 @@ def validate_executor_request(action: str, service: ServiceConfig, policy: Execu
         return False, "shell metacharacter rejected", unit, argv, action_policy.destructive
     if action_policy.requires_execute_flag and dry_run:
         return True, "dry run", unit, argv, action_policy.destructive
+    if action_policy.destructive and not dry_run:
+        if policy.require_reason_for_destructive and len((reason or "").strip()) < policy.min_destructive_reason_chars:
+            return False, "destructive action requires operator reason", unit, argv, action_policy.destructive
+        required = destructive_confirmation_token(service.service_id, action)
+        if policy.require_confirmation_token_for_destructive and confirmation_token != required:
+            return False, f"destructive action requires confirmation token: {required}", unit, argv, action_policy.destructive
     if action == "systemctl_restart" and policy.restart_requires_service_policy:
         if service.policy.report_only or not service.policy.restart_enabled:
             return False, "restart blocked by service policy", unit, argv, action_policy.destructive
@@ -137,10 +178,14 @@ def execute_host_action(
     policy: ExecutorPolicy | None = None,
     policy_path: str = "/opt/doghouse/config/executor-policy.yaml",
     dry_run: bool = False,
+    reason: str | None = None,
+    confirmation_token: str | None = None,
 ) -> ExecutorResult:
     policy = policy or load_executor_policy(policy_path)
-    allowed, reason, unit, argv, destructive = validate_executor_request(action, service, policy, dry_run)
-    base = ExecutorResult(action=action, service_id=service.service_id, unit=unit, allowed=allowed, executed=False, reason=reason, destructive=destructive)
+    allowed, validation_reason, unit, argv, destructive = validate_executor_request(action, service, policy, dry_run, reason=reason, confirmation_token=confirmation_token)
+    base = ExecutorResult(action=action, service_id=service.service_id, unit=unit, allowed=allowed, executed=False, reason=validation_reason, destructive=destructive, request_reason=reason)
+    if destructive:
+        base.confirmation_required = destructive_confirmation_token(service.service_id, action)
     if not allowed or dry_run:
         _append_audit(policy, base, argv)
         return base

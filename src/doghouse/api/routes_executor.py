@@ -13,6 +13,8 @@ router = APIRouter(prefix="/api/v1/executor", tags=["executor"])
 class ExecuteRequest(BaseModel):
     action: str
     dry_run: bool = True
+    reason: str | None = None
+    confirmation_token: str | None = None
 
 
 @router.get("/policy")
@@ -26,4 +28,4 @@ def execute(service_id: str, request: ExecuteRequest) -> dict:
     matches = [item for item in services if item.service_id == service_id]
     if not matches:
         raise HTTPException(status_code=404, detail="unknown service_id")
-    return execute_host_action(request.action, matches[0], dry_run=request.dry_run).as_dict()
+    return execute_host_action(request.action, matches[0], dry_run=request.dry_run, reason=request.reason, confirmation_token=request.confirmation_token).as_dict()

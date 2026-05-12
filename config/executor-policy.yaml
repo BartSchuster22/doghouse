@@ -9,6 +9,10 @@ unit_name_regex: "^[A-Za-z0-9_.@\\-]+\\.service$"
 audit_log_path: /srv/shared-memory/logs/watchdog-v2/executor-audit.jsonl
 restart_cooldown_sec: 300
 max_output_chars: 4000
+require_reason_for_destructive: true
+min_destructive_reason_chars: 12
+require_confirmation_token_for_destructive: true
+audit_include_hash_chain: true
 allowed_services:
   hermes: hermes.service
   openclaw: openclaw.service

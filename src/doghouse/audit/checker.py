@@ -147,6 +147,14 @@ def check_executor_policy(config: DoghouseConfig, services: list[ServiceConfig])
         issues.append({"severity": "critical", "reason": "require_absolute_argv0 is false"})
     if not policy.allowed_binaries:
         issues.append({"severity": "critical", "reason": "allowed_binaries is empty"})
+    if not policy.require_reason_for_destructive:
+        issues.append({"severity": "critical", "reason": "destructive actions do not require reason"})
+    if not policy.require_confirmation_token_for_destructive:
+        issues.append({"severity": "critical", "reason": "destructive actions do not require confirmation token"})
+    if policy.min_destructive_reason_chars < 8:
+        issues.append({"severity": "warning", "reason": "destructive reason minimum is too short"})
+    if not policy.audit_include_hash_chain:
+        issues.append({"severity": "warning", "reason": "executor audit hash chain disabled"})
     for action_name, action in policy.allowed_actions.items():
         if not action.argv:
             issues.append({"severity": "critical", "action": action_name, "reason": "empty argv"})

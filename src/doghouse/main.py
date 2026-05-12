@@ -17,6 +17,7 @@ from doghouse.shadow.checker import shadow_once
 from doghouse.soak.report import generate_soak_report
 from doghouse.cutover.manager import cutover_service
 from doghouse.service_watchdog.checker import check_service
+from doghouse.readiness.openclaw import check_openclaw_readiness
 
 
 def run_check(service_id: str | None) -> int:
@@ -44,7 +45,10 @@ def main() -> int:
     executor.add_argument("service_id")
     executor.add_argument("action")
     executor.add_argument("--execute", action="store_true", help="actually run the whitelisted action; default is dry-run")
+    executor.add_argument("--reason", default=None, help="operator reason required for destructive execution")
+    executor.add_argument("--confirmation-token", default=None, help="required token for destructive execution, e.g. EXECUTE:openclaw:systemctl_restart")
     sub.add_parser("shadow-once")
+    sub.add_parser("openclaw-readiness")
     soak = sub.add_parser("soak-report")
     soak.add_argument("--since", default="24h")
     qa = sub.add_parser("qa-gate")
@@ -70,7 +74,10 @@ def main() -> int:
         selected = [s for s in services if s.service_id == args.service_id]
         if not selected:
             raise SystemExit(f"unknown service_id: {args.service_id}")
-        print(json.dumps(execute_host_action(args.action, selected[0], dry_run=not args.execute).as_dict(), indent=2, sort_keys=True))
+        print(json.dumps(execute_host_action(args.action, selected[0], dry_run=not args.execute, reason=args.reason, confirmation_token=args.confirmation_token).as_dict(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "openclaw-readiness":
+        print(json.dumps(check_openclaw_readiness(load_config_from_env(), persist=True), indent=2, sort_keys=True))
         return 0
     if args.command == "shadow-once":
         print(json.dumps(shadow_once(load_config_from_env(), persist=True), indent=2, sort_keys=True))
