@@ -11,6 +11,8 @@ class ExecutorActionPolicy(BaseModel):
     name: str
     argv: list[str]
     timeout_sec: int = 30
+    destructive: bool = False
+    requires_execute_flag: bool = False
 
 
 class ExecutorPolicy(BaseModel):
@@ -19,15 +21,21 @@ class ExecutorPolicy(BaseModel):
     allowed_services: dict[str, str] = Field(default_factory=dict)
     allowed_actions: dict[str, ExecutorActionPolicy] = Field(default_factory=dict)
     restart_requires_service_policy: bool = True
+    require_absolute_argv0: bool = True
+    allowed_binaries: list[str] = Field(default_factory=lambda: ["/bin/systemctl", "/usr/bin/systemctl"])
+    unit_name_regex: str = r"^[A-Za-z0-9_.@\\-]+\\.service$"
+    audit_log_path: str = "/srv/shared-memory/logs/watchdog-v2/executor-audit.jsonl"
+    restart_cooldown_sec: int = 300
+    max_output_chars: int = 4000
 
 
 def default_policy() -> ExecutorPolicy:
     return ExecutorPolicy(
         enabled=False,
         allowed_actions={
-            "systemctl_is_active": ExecutorActionPolicy(name="systemctl_is_active", argv=["systemctl", "is-active", "{unit}"], timeout_sec=10),
-            "systemctl_show": ExecutorActionPolicy(name="systemctl_show", argv=["systemctl", "show", "{unit}", "--property=ActiveState,SubState,MainPID,NRestarts"], timeout_sec=10),
-            "systemctl_restart": ExecutorActionPolicy(name="systemctl_restart", argv=["systemctl", "restart", "{unit}"], timeout_sec=60),
+            "systemctl_is_active": ExecutorActionPolicy(name="systemctl_is_active", argv=["/bin/systemctl", "is-active", "{unit}"], timeout_sec=10),
+            "systemctl_show": ExecutorActionPolicy(name="systemctl_show", argv=["/bin/systemctl", "show", "{unit}", "--property=ActiveState,SubState,MainPID,NRestarts"], timeout_sec=10),
+            "systemctl_restart": ExecutorActionPolicy(name="systemctl_restart", argv=["/bin/systemctl", "restart", "{unit}"], timeout_sec=60, destructive=True, requires_execute_flag=True),
         },
     )
 

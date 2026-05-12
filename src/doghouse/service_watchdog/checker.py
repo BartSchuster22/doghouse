@@ -144,10 +144,13 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
             if service.policy.report_only or not service.policy.restart_enabled:
                 result.action = {"action": "systemctl_restart", "executed": False, "reason": "report-only or restart disabled"}
             elif service.policy.active_task_guard:
-                devtasks = check_devtasks(config, persist=True)
+                devtasks = check_devtasks(config, active_work_url=service.endpoints.get("active_work") or service.endpoints.get("watchdog_active_work"), persist=True)
+                source_failures = [source for source in devtasks.get("active_work_sources", []) if source.get("ok") is False and source.get("url")]
                 active = [task for task in devtasks.get("tasks", []) if task.get("classification") in {"active", "idle", "stuck", "orphaned", "unknown"}]
                 if active:
                     result.action = {"action": "systemctl_restart", "executed": False, "reason": "active task guard deferred restart", "active_task_count": len(active)}
+                elif source_failures and service.policy.active_task_query_failure_policy == "defer":
+                    result.action = {"action": "systemctl_restart", "executed": False, "reason": "active task query failed; defer policy active", "source_failures": source_failures}
             if result.action is None:
                 result.action = execute_host_action("systemctl_restart", service, policy_path=config.host_executor.policy_path).as_dict()
         write_state_atomic(path, result.model_dump(mode="json"))

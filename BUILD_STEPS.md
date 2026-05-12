@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: Phase 0 through Phase 12 implemented in repo. Hermes and OpenClaw are cut over to Doghouse timers; old service watchdog timers are disabled and rollback commands are documented.
+Status: Phase 0 through Phase 16 implemented in repo. Hermes and OpenClaw are cut over to Doghouse timers; old service watchdog timers are disabled and rollback commands are documented.
 
 ## Phase 0 — repository and skeleton
 
@@ -116,6 +116,36 @@ Status: Phase 0 through Phase 12 implemented in repo. Hermes and OpenClaw are cu
 2. Enable `doghouse-check@openclaw.timer`.
 3. Disable `watchdog-openclaw.timer` after healthy Doghouse precheck.
 4. Rollback command: `systemctl enable --now watchdog-openclaw.timer && systemctl disable --now doghouse-check@openclaw.timer`.
+
+## Phase 13 — host executor hardening
+
+1. Require absolute executable paths for every whitelisted action.
+2. Restrict executable paths to an explicit `allowed_binaries` list.
+3. Reject invalid systemd unit names with a regex gate.
+4. Mark destructive actions and require explicit execution intent.
+5. Keep restart gated by per-service policy and add restart cooldown.
+6. Run commands with a scrubbed environment, `cwd=/`, `shell=False`, and bounded output.
+7. Append every allow/deny/dry-run/execution result to an executor audit JSONL log.
+
+## Phase 14 — devtask-watchdog integration
+
+1. Add `doghouse-devtasks.service` and `doghouse-devtasks.timer` templates.
+2. Merge active-work API results with heartbeat files.
+3. Persist `devtasks/last-check.json` on each scheduled check.
+4. Keep kill/interrupt disabled and write checkpoints for idle/stuck/orphaned/unknown tasks.
+
+## Phase 15 — watchdog audit completion
+
+1. Audit Doghouse systemd timers and old watchdog timer states.
+2. Audit executor hardening policy.
+3. Audit devtask-state freshness.
+4. Audit shadow-state freshness.
+5. Keep audit report persisted under `state_dir/audit/last-audit.json`.
+
+## Phase 16 — documentation and operator runbook
+
+1. Add `docs/operator-runbook.md`.
+2. Document status checks, timer checks, API checks, host executor use, devtask heartbeat schema, incident/state paths, and rollback commands.
 
 ## Safety defaults
 

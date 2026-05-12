@@ -17,6 +17,9 @@ def _parse_since(value: str) -> tuple[str, datetime]:
     if raw.endswith("h") and raw[:-1].isdigit():
         hours = int(raw[:-1])
         return f"{hours} hours ago", now - timedelta(hours=hours)
+    if raw.endswith("m") and raw[:-1].isdigit():
+        minutes = int(raw[:-1])
+        return f"{minutes} minutes ago", now - timedelta(minutes=minutes)
     if raw.endswith("d") and raw[:-1].isdigit():
         days = int(raw[:-1])
         return f"{days} days ago", now - timedelta(days=days)
@@ -90,9 +93,9 @@ def generate_soak_report(config: DoghouseConfig, since: str = "24h", persist: bo
     for service_id in service_ids:
         latest_states[service_id] = _read_json(state_dir / "services" / f"{service_id}.json") or {"exists": False}
     shadow = _read_json(state_dir / "shadow" / "last-shadow-report.json")
-    audit = _read_json(state_dir / "audit" / "latest.json")
+    audit = _read_json(state_dir / "audit" / "last-audit.json")
     units = [f"doghouse-check@{service_id}.service" for service_id in service_ids]
-    units.append("doghouse-shadow.service")
+    units.extend(["doghouse-devtasks.service", "doghouse-shadow.service", "doghouse-audit.service"])
     journal = _journal_summary(units, since_systemd)
     incidents = _incident_summary(Path(config.paths.incident_dir), since_dt)
     unhealthy = [sid for sid, state in latest_states.items() if state.get("classification") not in {"healthy", "not_configured"}]

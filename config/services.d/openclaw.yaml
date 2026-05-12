@@ -15,7 +15,8 @@ policy:
   timeout_sec: 10
   startup_grace_sec: 90
   restart_settle_sec: 15
-  active_task_guard: false
+  active_task_guard: true
+  active_task_query_failure_policy: defer
 extra_checks:
   - id: telegram_bot
     type: command

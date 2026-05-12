@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Doghouse watchdog v2 audit every five minutes
+
+[Timer]
+OnBootSec=180s
+OnUnitActiveSec=300s
+AccuracySec=10s
+Unit=doghouse-audit.service
+
+[Install]
+WantedBy=timers.target

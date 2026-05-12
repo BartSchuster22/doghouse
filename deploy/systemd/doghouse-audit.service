@@ -1,0 +1,11 @@
+[Unit]
+Description=Doghouse watchdog v2 audit check
+Documentation=https://github.com/BartSchuster22/doghouse
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/doghouse
+Environment=DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml
+ExecStart=/opt/doghouse/.venv/bin/python -m doghouse.main audit

@@ -9,6 +9,7 @@ from typing import Any
 import httpx
 
 from doghouse.common.config import DoghouseConfig, load_config_from_env
+from doghouse.common.service_config import load_services
 from doghouse.service_watchdog.state import utc_now_iso
 
 
@@ -35,6 +36,15 @@ def checkpoint_file(config: DoghouseConfig, task_id: str) -> Path:
     return Path(config.paths.checkpoint_dir) / f"{safe}.json"
 
 
+def active_work_urls_from_services() -> list[str]:
+    urls: list[str] = []
+    for service in load_services("/opt/doghouse/config/services.d") or load_services("config/services.d"):
+        url = service.endpoints.get("active_work") or service.endpoints.get("watchdog_active_work")
+        if url and url not in urls:
+            urls.append(url)
+    return urls
+
+
 def fetch_active_work(url: str | None, timeout_sec: int = 5) -> dict[str, Any]:
     if not url:
         return {"ok": False, "reason": "active-work URL not configured", "tasks": []}
@@ -58,7 +68,8 @@ def read_heartbeats(config: DoghouseConfig) -> list[dict[str, Any]]:
     for path in sorted(root.glob("*.json")):
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError):
+        except (OSError, json.JSONDecodeError) as exc:
+            items.append({"task_id": path.stem, "heartbeat_path": str(path), "status": "unreadable", "error": f"{type(exc).__name__}: {exc}"})
             continue
         data.setdefault("task_id", path.stem)
         data["heartbeat_path"] = str(path)
@@ -66,23 +77,37 @@ def read_heartbeats(config: DoghouseConfig) -> list[dict[str, Any]]:
     return items
 
 
-def classify_task(task: dict[str, Any], now: datetime | None = None, idle_sec: int = 900, orphaned_sec: int = 3600) -> tuple[str, str]:
+def classify_task(task: dict[str, Any], now: datetime | None = None, idle_sec: int = 900, stuck_sec: int = 1800, orphaned_sec: int = 3600) -> tuple[str, str]:
     now = now or datetime.now(timezone.utc)
-    last_seen = _parse_iso(str(task.get("last_seen_at") or task.get("updated_at") or task.get("heartbeat_at") or ""))
     status = str(task.get("status") or "active")
     if status in {"completed", "cancelled", "failed"}:
         return status, f"task status is {status}"
+    if status == "unreadable":
+        return "unknown", str(task.get("error") or "heartbeat unreadable")
+    last_seen = _parse_iso(str(task.get("last_seen_at") or task.get("updated_at") or task.get("heartbeat_at") or task.get("last_tool_call_at") or ""))
     if last_seen is None:
         return "unknown", "no parseable heartbeat timestamp"
     age = (now - last_seen).total_seconds()
+    pid = task.get("pid")
+    if pid:
+        try:
+            os.kill(int(pid), 0)
+            pid_alive = True
+        except OSError:
+            pid_alive = False
+        if not pid_alive and status == "active":
+            return "orphaned", f"pid {pid} is not alive"
     if age >= orphaned_sec:
         return "orphaned", f"last heartbeat {int(age)}s ago"
-    if age >= idle_sec:
-        return "idle", f"last heartbeat {int(age)}s ago"
     if task.get("expected_progress_at"):
         expected = _parse_iso(str(task.get("expected_progress_at")))
         if expected and now > expected:
             return "stuck", "expected progress timestamp has passed"
+    last_progress = _parse_iso(str(task.get("last_progress_at") or task.get("last_stdout_at") or task.get("last_file_change_at") or ""))
+    if last_progress and (now - last_progress).total_seconds() >= stuck_sec:
+        return "stuck", f"no progress for {int((now-last_progress).total_seconds())}s"
+    if age >= idle_sec:
+        return "idle", f"last heartbeat {int(age)}s ago"
     return "active", f"last heartbeat {int(age)}s ago"
 
 
@@ -103,32 +128,50 @@ def write_checkpoint(config: DoghouseConfig, task: dict[str, Any], classificatio
     return str(path)
 
 
+def merge_tasks(active_work_results: list[dict[str, Any]], heartbeats: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    tasks: dict[str, dict[str, Any]] = {}
+    for source in active_work_results:
+        for task in source.get("tasks", []):
+            if isinstance(task, dict):
+                task_id = str(task.get("task_id") or task.get("id") or len(tasks))
+                task["task_id"] = task_id
+                task["source"] = "active_work_api"
+                tasks[task_id] = task
+    for task in heartbeats:
+        task_id = str(task.get("task_id") or task.get("id") or len(tasks))
+        tasks[task_id] = {**tasks.get(task_id, {}), **task, "task_id": task_id, "source": "heartbeat_file"}
+    return tasks
+
+
 def check_devtasks(config: DoghouseConfig | None = None, active_work_url: str | None = None, persist: bool = True) -> dict[str, Any]:
     config = config or load_config_from_env()
-    active_work = fetch_active_work(active_work_url)
-    tasks: dict[str, dict[str, Any]] = {}
-    for task in active_work.get("tasks", []):
-        if isinstance(task, dict):
-            task_id = str(task.get("task_id") or task.get("id") or len(tasks))
-            task["task_id"] = task_id
-            tasks[task_id] = task
-    for task in read_heartbeats(config):
-        task_id = str(task.get("task_id") or task.get("id") or len(tasks))
-        tasks[task_id] = {**tasks.get(task_id, {}), **task, "task_id": task_id}
+    urls = [active_work_url] if active_work_url else active_work_urls_from_services()
+    active_work_results = [fetch_active_work(url) for url in urls] if urls else [fetch_active_work(None)]
+    tasks = merge_tasks(active_work_results, read_heartbeats(config))
 
     checked = []
+    counts: dict[str, int] = {}
     for task in tasks.values():
         classification, reason = classify_task(task)
+        counts[classification] = counts.get(classification, 0) + 1
         checkpoint_path = None
         if persist and classification in {"stuck", "idle", "orphaned", "unknown"}:
             checkpoint_path = write_checkpoint(config, task, classification, reason)
         checked.append({"task_id": task.get("task_id"), "classification": classification, "reason": reason, "checkpoint_path": checkpoint_path, "kill_enabled": False, "interrupt_enabled": False, "task": task})
 
+    overall = "ok"
+    if any(k in counts for k in ("stuck", "orphaned", "unknown")):
+        overall = "attention"
+    elif counts.get("idle"):
+        overall = "watch"
     result = {
         "checked_at": utc_now_iso(),
         "mode": "report-only",
-        "active_work": {k: v for k, v in active_work.items() if k != "tasks"},
+        "status": overall,
+        "active_work_sources": [{k: v for k, v in item.items() if k != "tasks"} for item in active_work_results],
+        "heartbeat_dir": str(heartbeat_dir(config)),
         "task_count": len(checked),
+        "counts": counts,
         "tasks": checked,
         "kill_enabled": False,
         "interrupt_enabled": False,

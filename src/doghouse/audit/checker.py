@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from doghouse.common.config import DoghouseConfig, load_config_from_env
 from doghouse.common.service_config import ServiceConfig, load_services
+from doghouse.host_executor.policy import load_executor_policy
 from doghouse.service_watchdog.state import state_file, utc_now_iso
 
 
@@ -39,6 +41,19 @@ def _writable_dir(path: str | Path) -> dict[str, Any]:
     return result
 
 
+def _systemctl_show_unit(unit: str) -> dict[str, Any]:
+    try:
+        p = subprocess.run(["/bin/systemctl", "show", unit, "--property=LoadState,ActiveState,SubState,UnitFileState"], text=True, capture_output=True, timeout=10, check=False)
+        props = {}
+        for line in p.stdout.splitlines():
+            if "=" in line:
+                k, v = line.split("=", 1)
+                props[k] = v
+        return {"unit": unit, "returncode": p.returncode, **props, "stderr": p.stderr[-1000:]}
+    except Exception as exc:
+        return {"unit": unit, "error": f"{type(exc).__name__}: {exc}"}
+
+
 def check_scheduler_freshness(config: DoghouseConfig, services: list[ServiceConfig]) -> dict[str, Any]:
     now = datetime.now(timezone.utc)
     items = []
@@ -52,7 +67,7 @@ def check_scheduler_freshness(config: DoghouseConfig, services: list[ServiceConf
                 checked = _parse_iso(data.get("checked_at", ""))
                 if checked:
                     age = (now - checked).total_seconds()
-                    item.update({"checked_at": data.get("checked_at"), "age_sec": int(age), "fresh": age <= max_age})
+                    item.update({"checked_at": data.get("checked_at"), "age_sec": int(age), "fresh": age <= max_age, "classification": data.get("classification")})
                 else:
                     item["reason"] = "missing/invalid checked_at"
             except (OSError, json.JSONDecodeError) as exc:
@@ -72,6 +87,8 @@ def check_policy(services: list[ServiceConfig], config: DoghouseConfig) -> dict[
             violations.append({"service_id": service.service_id, "severity": "warning", "reason": "restart_enabled true while report_only true"})
         if service.policy.failure_threshold < 2:
             violations.append({"service_id": service.service_id, "severity": "warning", "reason": "failure_threshold below 2"})
+        if service.policy.restart_enabled and not service.policy.active_task_guard:
+            violations.append({"service_id": service.service_id, "severity": "warning", "reason": "restart enabled without active_task_guard"})
     if config.safety.default_kill_enabled:
         violations.append({"service_id": "default", "severity": "critical", "reason": "default_kill_enabled is true"})
     if config.safety.default_restart_enabled:
@@ -89,23 +106,90 @@ def check_paths(config: DoghouseConfig) -> dict[str, Any]:
     return {"status": "ok" if all(item["writable"] for item in paths.values()) else "attention", "paths": paths}
 
 
-def check_old_watchdog_migration(services: list[ServiceConfig]) -> dict[str, Any]:
+def check_systemd_units(services: list[ServiceConfig]) -> dict[str, Any]:
     items = []
     for service in services:
-        unit = service.runtime.unit or f"{service.service_id}.service"
-        timer = Path(f"/etc/systemd/system/watchdog-{service.service_id}.timer")
-        svc = Path(f"/etc/systemd/system/watchdog-{service.service_id}.service")
+        new_timer = f"doghouse-check@{service.service_id}.timer"
+        old_timer = f"watchdog-{service.service_id}.timer"
+        runtime = service.runtime.unit or f"{service.service_id}.service"
+        items.append({"service_id": service.service_id, "runtime": _systemctl_show_unit(runtime), "doghouse_timer": _systemctl_show_unit(new_timer), "old_watchdog_timer": _systemctl_show_unit(old_timer)})
+    ok = all(item["doghouse_timer"].get("ActiveState") == "active" and item["doghouse_timer"].get("UnitFileState") == "enabled" for item in items)
+    return {"status": "ok" if ok else "attention", "items": items}
+
+
+def check_old_watchdog_migration(services: list[ServiceConfig]) -> dict[str, Any]:
+    items = []
+    attention = False
+    for service in services:
+        timer_state = _systemctl_show_unit(f"watchdog-{service.service_id}.timer")
+        active = timer_state.get("ActiveState") == "active"
+        enabled = timer_state.get("UnitFileState") == "enabled"
+        if service.policy.restart_enabled and (active or enabled):
+            attention = True
         items.append({
             "service_id": service.service_id,
-            "runtime_unit": unit,
-            "old_timer_path": str(timer),
-            "old_timer_file_exists": timer.exists(),
-            "old_service_path": str(svc),
-            "old_service_file_exists": svc.exists(),
-            "cutover_state": "old-watchdog-file-present" if timer.exists() or svc.exists() else "no-old-watchdog-file-detected",
+            "old_timer_path": f"/etc/systemd/system/watchdog-{service.service_id}.timer",
+            "old_timer_file_exists": Path(f"/etc/systemd/system/watchdog-{service.service_id}.timer").exists(),
+            "old_timer_active": active,
+            "old_timer_enabled": enabled,
             "doghouse_restart_enabled": service.policy.restart_enabled,
+            "cutover_state": "attention-old-and-new-enabled" if service.policy.restart_enabled and (active or enabled) else "ok-or-inventory",
         })
-    return {"status": "inventory", "items": items, "note": "file inventory only; Phase 5 does not disable old timers or cut over services"}
+    return {"status": "attention" if attention else "ok", "items": items}
+
+
+def check_executor_policy(config: DoghouseConfig, services: list[ServiceConfig]) -> dict[str, Any]:
+    policy = load_executor_policy(config.host_executor.policy_path)
+    issues = []
+    if not policy.enabled:
+        issues.append({"severity": "warning", "reason": "executor policy disabled"})
+    if not policy.require_absolute_argv0:
+        issues.append({"severity": "critical", "reason": "require_absolute_argv0 is false"})
+    if not policy.allowed_binaries:
+        issues.append({"severity": "critical", "reason": "allowed_binaries is empty"})
+    for action_name, action in policy.allowed_actions.items():
+        if not action.argv:
+            issues.append({"severity": "critical", "action": action_name, "reason": "empty argv"})
+        elif policy.require_absolute_argv0 and not action.argv[0].startswith("/"):
+            issues.append({"severity": "critical", "action": action_name, "reason": "argv0 not absolute"})
+        if action.destructive and not action.requires_execute_flag:
+            issues.append({"severity": "critical", "action": action_name, "reason": "destructive action does not require execute flag"})
+    for service in services:
+        if service.policy.restart_enabled and service.service_id not in policy.allowed_services:
+            issues.append({"severity": "warning", "service_id": service.service_id, "reason": "restart-enabled service not executor-whitelisted"})
+    return {"status": "ok" if not issues else "attention", "issues": issues, "policy_path": config.host_executor.policy_path, "audit_log_path": policy.audit_log_path}
+
+
+def check_devtask_state(config: DoghouseConfig) -> dict[str, Any]:
+    path = Path(config.paths.state_dir) / "devtasks" / "last-check.json"
+    hb_dir = Path(config.paths.state_dir) / "devtasks" / "heartbeats"
+    result = {"state_path": str(path), "heartbeat_dir": str(hb_dir), "heartbeat_files": len(list(hb_dir.glob("*.json"))) if hb_dir.exists() else 0}
+    if not path.exists():
+        result.update({"status": "attention", "reason": "devtask check has not run"})
+        return result
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        checked = _parse_iso(str(data.get("checked_at", "")))
+        age = int((datetime.now(timezone.utc) - checked).total_seconds()) if checked else None
+        max_age = max(config.scheduler.devtask_interval_sec * 6, 600)
+        result.update({"status": "ok" if age is not None and age <= max_age else "attention", "checked_at": data.get("checked_at"), "age_sec": age, "max_age_sec": max_age, "task_count": data.get("task_count"), "devtask_status": data.get("status")})
+    except (OSError, json.JSONDecodeError) as exc:
+        result.update({"status": "attention", "error": f"{type(exc).__name__}: {exc}"})
+    return result
+
+
+def check_shadow_state(config: DoghouseConfig) -> dict[str, Any]:
+    path = Path(config.paths.state_dir) / "shadow" / "last-shadow-report.json"
+    if not path.exists():
+        return {"status": "attention", "state_path": str(path), "reason": "shadow state missing"}
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        checked = _parse_iso(str(data.get("checked_at", "")))
+        age = int((datetime.now(timezone.utc) - checked).total_seconds()) if checked else None
+        max_age = max(config.scheduler.service_interval_sec * 6, 600)
+        return {"status": "ok" if data.get("status") == "ok" and age is not None and age <= max_age else "attention", "state_path": str(path), "checked_at": data.get("checked_at"), "age_sec": age, "max_age_sec": max_age, "shadow_status": data.get("status")}
+    except (OSError, json.JSONDecodeError) as exc:
+        return {"status": "attention", "state_path": str(path), "error": f"{type(exc).__name__}: {exc}"}
 
 
 def run_audit(config: DoghouseConfig | None = None, services_dir: str | Path | None = None, persist: bool = True) -> dict[str, Any]:
@@ -116,7 +200,11 @@ def run_audit(config: DoghouseConfig | None = None, services_dir: str | Path | N
         "scheduler_freshness": check_scheduler_freshness(config, services),
         "policy": check_policy(services, config),
         "paths": check_paths(config),
+        "systemd_units": check_systemd_units(services),
         "old_watchdog_migration": check_old_watchdog_migration(services),
+        "executor_policy": check_executor_policy(config, services),
+        "devtask_state": check_devtask_state(config),
+        "shadow_state": check_shadow_state(config),
     }
     status = "ok" if all(section.get("status") in {"ok", "inventory"} for section in sections.values()) else "attention"
     result = {"checked_at": utc_now_iso(), "mode": "report-only", "status": status, "sections": sections}

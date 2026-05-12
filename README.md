@@ -50,6 +50,8 @@ DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse soak-report --since 24h
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse cutover-service hermes
 ```
 
+Operator runbook: `docs/operator-runbook.md`.
+
 ## Docker
 
 ```bash
