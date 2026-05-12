@@ -11,7 +11,7 @@ Initial posture:
 - no host executor before Phase 6
 - whitelist-only host executor
 - service-by-service cutover; kill remains disabled
-- current production watchdog remains untouched
+- old production watchdog is migrated service-by-service with documented rollback
 
 See `BUILD_STEPS.md` for the staged implementation plan.
 
@@ -35,6 +35,7 @@ curl -X POST http://127.0.0.1:18793/api/v1/devtasks/check
 curl -X POST http://127.0.0.1:18793/api/v1/audit/run
 curl http://127.0.0.1:18793/api/v1/executor/policy
 curl -X POST http://127.0.0.1:18793/api/v1/shadow/run
+curl http://127.0.0.1:18793/api/v1/soak
 ```
 
 CLI check:
@@ -45,6 +46,7 @@ DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse check-devtasks
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse audit
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse executor hermes systemctl_show
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse shadow-once
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse soak-report --since 24h
 DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse cutover-service hermes
 ```
 

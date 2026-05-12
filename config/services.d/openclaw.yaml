@@ -4,10 +4,12 @@ runtime:
   type: systemd
   unit: openclaw.service
 endpoints:
-  health: http://127.0.0.1:8081/health
+  live: http://127.0.0.1:18789/health
+  ready: http://127.0.0.1:18789/ready
+  health: http://127.0.0.1:18789/health
 policy:
-  report_only: true
-  restart_enabled: false
+  report_only: false
+  restart_enabled: true
   kill_enabled: false
   failure_threshold: 3
   timeout_sec: 10

@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: Phase 0 through Phase 8 implemented in repo. Hermes is prepared as the first cutover service; production timer enablement requires live-lane root approval/handoff.
+Status: Phase 0 through Phase 12 implemented in repo. Hermes and OpenClaw are cut over to Doghouse timers; old service watchdog timers are disabled and rollback commands are documented.
 
 ## Phase 0 — repository and skeleton
 
@@ -89,6 +89,33 @@ Status: Phase 0 through Phase 8 implemented in repo. Hermes is prepared as the f
 4. Disable old timer for that service. Cutover manager supports this with `doghouse cutover-service hermes --execute`; live execution requires root/live-lane approval.
 5. Monitor. Use `systemctl list-timers 'doghouse*' 'watchdog-*' --all --no-pager`, `journalctl -u doghouse-check@hermes.service`, and `doghouse shadow-once`.
 6. Roll back if needed. Run `systemctl enable --now watchdog-hermes.timer` and `systemctl disable --now doghouse-check@hermes.timer`.
+
+## Phase 9 — stabilization soak
+
+1. Add `doghouse soak-report --since 24h` for persisted post-cutover evidence.
+2. Add `GET /api/v1/soak` for API access to the latest soak report.
+3. Summarize current service states, shadow state, audit state, recent incidents, and journal evidence when available.
+4. Persist latest soak evidence under `state_dir/soak/latest-soak-report.json`.
+
+## Phase 10 — native service endpoint cleanup
+
+1. Verify Hermes currently exposes `/health` only; keep `/health` as temporary live/ready/health source until Hermes implements native `/live` and `/ready`.
+2. Repair OpenClaw endpoint config from stale `127.0.0.1:8081` to live OpenClaw gateway `127.0.0.1:18789`.
+3. Configure OpenClaw readiness via `http://127.0.0.1:18789/ready` and restart-grade liveness via the known-good `http://127.0.0.1:18789/health` endpoint.
+4. Keep kill disabled.
+
+## Phase 11 — OpenClaw/Alice repair before cutover
+
+1. Confirm `openclaw.service` is active.
+2. Confirm port `18789` is listening and returns healthy `/ready` and `/health` responses.
+3. Confirm Doghouse classifies OpenClaw healthy before cutover.
+
+## Phase 12 — OpenClaw service-by-service cutover
+
+1. Enable Doghouse OpenClaw policy: `report_only: false`, `restart_enabled: true`, `kill_enabled: false`.
+2. Enable `doghouse-check@openclaw.timer`.
+3. Disable `watchdog-openclaw.timer` after healthy Doghouse precheck.
+4. Rollback command: `systemctl enable --now watchdog-openclaw.timer && systemctl disable --now doghouse-check@openclaw.timer`.
 
 ## Safety defaults
 

@@ -12,6 +12,7 @@ from doghouse.common.service_config import load_services
 from doghouse.devtask_watchdog.checker import check_devtasks
 from doghouse.host_executor.executor import execute_host_action
 from doghouse.shadow.checker import shadow_once
+from doghouse.soak.report import generate_soak_report
 from doghouse.cutover.manager import cutover_service
 from doghouse.service_watchdog.checker import check_service
 
@@ -42,6 +43,8 @@ def main() -> int:
     executor.add_argument("action")
     executor.add_argument("--execute", action="store_true", help="actually run the whitelisted action; default is dry-run")
     sub.add_parser("shadow-once")
+    soak = sub.add_parser("soak-report")
+    soak.add_argument("--since", default="24h")
     cutover = sub.add_parser("cutover-service")
     cutover.add_argument("service_id")
     cutover.add_argument("--execute", action="store_true", help="actually disable the old watchdog timer; default is dry-run")
@@ -64,6 +67,9 @@ def main() -> int:
         return 0
     if args.command == "shadow-once":
         print(json.dumps(shadow_once(load_config_from_env(), persist=True), indent=2, sort_keys=True))
+        return 0
+    if args.command == "soak-report":
+        print(json.dumps(generate_soak_report(load_config_from_env(), since=args.since, persist=True), indent=2, sort_keys=True))
         return 0
     if args.command == "cutover-service":
         print(json.dumps(cutover_service(args.service_id, load_config_from_env(), dry_run=not args.execute), indent=2, sort_keys=True))
