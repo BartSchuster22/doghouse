@@ -234,3 +234,30 @@ Status: Phase 0 through Phase 20 implemented in repo. Hermes and OpenClaw are cu
 - Kill disabled by default.
 - Host executor restricted to whitelist-only actions.
 - Current production watchdog rollback timers remain installed but disabled after service-by-service cutover.
+
+## Phase 28 — Controlled restart drill
+
+- Added `doghouse restart-drill <service_id>` with dry-run and execute modes.
+- The drill checks service health, restart policy, kill-disabled policy, active task guard, executor dry-run, and post-restart health.
+- Executed a controlled OpenClaw restart through the hardened host executor using sudo/root context.
+- OpenClaw restart returned `0`; initial 15s postcheck was early, and extended startup-grace verification confirmed healthy.
+- Evidence: `/srv/shared-memory/state/watchdog-v2/drills/latest-restart-drill.json`.
+
+## Phase 29 — Security and privilege review
+
+- Added `doghouse security-review`.
+- Added API routes `/api/v1/security/review` and `/api/v1/security/review/run`.
+- Review covers host executor allowlists, destructive reason/token requirements, audit hash-chain, restart cooldown, kill-disabled policies, active-task guard policy, and selected file modes.
+- Current result: pass, 10.0/10, 0 critical findings.
+
+## Phase 30 — Release candidate
+
+- Added `doghouse release-candidate`.
+- Added API routes `/api/v1/release/candidate` and `/api/v1/release/candidate/run`.
+- Release candidate aggregates QA gate, audit, security review, daily evidence, soak report, commit, and artifact paths.
+- Evidence: `/srv/shared-memory/state/watchdog-v2/release/release-candidate.json` and `.md`.
+
+## Phase 28 correction
+
+- Corrected OpenClaw `active_work` endpoint mode to `not_supported`; the previous route returned frontend HTML, not JSON active-work data.
+- Doghouse still uses local devtask heartbeat files for active-task guard until OpenClaw exposes native JSON `/watchdog/active-work`.

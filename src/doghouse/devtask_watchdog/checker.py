@@ -200,8 +200,11 @@ def merge_tasks(active_work_results: list[dict[str, Any]], heartbeats: list[dict
 
 def check_devtasks(config: DoghouseConfig | None = None, active_work_url: str | None = None, persist: bool = True) -> dict[str, Any]:
     config = config or load_config_from_env()
-    urls = [active_work_url] if active_work_url else active_work_urls_from_services()
-    active_work_results = [fetch_active_work(url) for url in urls] if urls else [fetch_active_work(None)]
+    if active_work_url is not None:
+        urls = [active_work_url] if active_work_url else []
+    else:
+        urls = active_work_urls_from_services()
+    active_work_results = [fetch_active_work(url) for url in urls]
     tasks = merge_tasks(active_work_results, read_heartbeats(config))
 
     checked = []

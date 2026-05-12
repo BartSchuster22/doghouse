@@ -7,11 +7,14 @@ from fastapi import FastAPI
 from doghouse import __version__
 from doghouse.api.routes_audit import router as audit_router
 from doghouse.api.routes_devtasks import router as devtasks_router
+from doghouse.api.routes_drills import router as drills_router
 from doghouse.api.routes_executor import router as executor_router
 from doghouse.api.routes_incidents import router as incidents_router
 from doghouse.api.routes_qa import router as qa_router
 from doghouse.api.routes_notifications import router as notifications_router
 from doghouse.api.routes_readiness import router as readiness_router
+from doghouse.api.routes_release import router as release_router
+from doghouse.api.routes_security import router as security_router
 from doghouse.api.routes_services import router as services_router
 from doghouse.api.routes_shadow import router as shadow_router
 from doghouse.api.routes_soak import router as soak_router
@@ -31,6 +34,9 @@ def create_app() -> FastAPI:
     app.include_router(qa_router)
     app.include_router(readiness_router)
     app.include_router(notifications_router)
+    app.include_router(drills_router)
+    app.include_router(security_router)
+    app.include_router(release_router)
 
     @app.get("/api/v1/status")
     def status() -> dict:

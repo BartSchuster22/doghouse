@@ -14,11 +14,14 @@ from doghouse.notifications.notifier import notification_status, notify_event
 from doghouse.host_executor.executor import execute_host_action
 from doghouse.evidence.daily import generate_daily_evidence
 from doghouse.qa.gate import run_qa_gate
+from doghouse.release.rc import build_release_candidate
+from doghouse.security.review import run_security_review
 from doghouse.shadow.checker import shadow_once
 from doghouse.soak.report import generate_soak_report
 from doghouse.cutover.manager import cutover_service
 from doghouse.service_watchdog.checker import check_service
 from doghouse.readiness.openclaw import check_openclaw_readiness
+from doghouse.drills.restart import run_restart_drill
 
 
 def run_check(service_id: str | None) -> int:
@@ -72,6 +75,13 @@ def main() -> int:
     evidence = sub.add_parser("daily-evidence")
     evidence.add_argument("--since", default="24h")
     evidence.add_argument("--threshold", type=float, default=8.0)
+    drill = sub.add_parser("restart-drill")
+    drill.add_argument("service_id")
+    drill.add_argument("--execute", action="store_true")
+    drill.add_argument("--reason", default=None)
+    drill.add_argument("--settle-sec", type=int, default=15)
+    sub.add_parser("security-review")
+    sub.add_parser("release-candidate")
     cutover = sub.add_parser("cutover-service")
     cutover.add_argument("service_id")
     cutover.add_argument("--execute", action="store_true", help="actually disable the old watchdog timer; default is dry-run")
@@ -121,6 +131,18 @@ def main() -> int:
         report = generate_daily_evidence(load_config_from_env(), since=args.since, threshold=args.threshold, persist=True)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report.get("status") == "pass" else 2
+    if args.command == "restart-drill":
+        report = run_restart_drill(args.service_id, load_config_from_env(), execute=args.execute, reason=args.reason, settle_sec=args.settle_sec, persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") in {"pass", "dry_run_pass"} else 2
+    if args.command == "security-review":
+        report = run_security_review(load_config_from_env(), persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") == "pass" else 2
+    if args.command == "release-candidate":
+        report = build_release_candidate(load_config_from_env(), persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") == "rc-ready" else 2
     if args.command == "cutover-service":
         print(json.dumps(cutover_service(args.service_id, load_config_from_env(), dry_run=not args.execute), indent=2, sort_keys=True))
         return 0

@@ -144,7 +144,8 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
             if service.policy.report_only or not service.policy.restart_enabled:
                 result.action = {"action": "systemctl_restart", "executed": False, "reason": "report-only or restart disabled"}
             elif service.policy.active_task_guard:
-                devtasks = check_devtasks(config, active_work_url=service.endpoints.get("active_work") or service.endpoints.get("watchdog_active_work"), persist=True)
+                active_work_url = service.endpoints.get("active_work") or service.endpoints.get("watchdog_active_work") or ""
+                devtasks = check_devtasks(config, active_work_url=active_work_url, persist=True)
                 source_failures = [source for source in devtasks.get("active_work_sources", []) if source.get("ok") is False and source.get("url")]
                 active = [task for task in devtasks.get("tasks", []) if task.get("classification") in {"active", "idle", "stuck", "orphaned", "unknown"}]
                 if active:
