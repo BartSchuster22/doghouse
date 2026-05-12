@@ -1,0 +1,21 @@
+api:
+  bind: 127.0.0.1
+  port: 18793
+  auth_mode: none-local-only
+
+scheduler:
+  service_interval_sec: 60
+  devtask_interval_sec: 60
+  audit_interval_sec: 300
+
+paths:
+  state_dir: /srv/shared-memory/state/watchdog-v2
+  incident_dir: /srv/shared-memory/incidents/open
+  log_dir: /srv/shared-memory/logs/watchdog-v2
+  checkpoint_dir: /srv/shared-memory/checkpoints/interrupted-tasks
+
+safety:
+  default_report_only: true
+  default_restart_enabled: false
+  default_kill_enabled: false
+  dedupe_window_sec: 1800

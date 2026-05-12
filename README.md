@@ -16,10 +16,10 @@ See `BUILD_STEPS.md` for the staged implementation plan.
 ## Quick local run
 
 ```bash
-python -m venv .venv
+/home/herman/.local/bin/python3.11 -m venv .venv
 . .venv/bin/activate
 pip install -e .
-doghouse
+DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse
 ```
 
 Then check:
