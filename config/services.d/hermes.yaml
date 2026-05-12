@@ -4,13 +4,13 @@ runtime:
   type: systemd
   unit: hermes.service
 endpoints:
-  live: http://127.0.0.1:8080/live
-  ready: http://127.0.0.1:8080/ready
+  live: http://127.0.0.1:8080/health
+  ready: http://127.0.0.1:8080/health
   health: http://127.0.0.1:8080/health
   active_work: http://127.0.0.1:8080/watchdog/active-work
 policy:
-  report_only: true
-  restart_enabled: false
+  report_only: false
+  restart_enabled: true
   kill_enabled: false
   failure_threshold: 3
   timeout_sec: 10

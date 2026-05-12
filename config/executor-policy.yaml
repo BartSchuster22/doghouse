@@ -1,0 +1,19 @@
+enabled: true
+socket_path: /run/doghouse-executor.sock
+restart_requires_service_policy: true
+allowed_services:
+  hermes: hermes.service
+  openclaw: openclaw.service
+allowed_actions:
+  systemctl_is_active:
+    name: systemctl_is_active
+    argv: [systemctl, is-active, "{unit}"]
+    timeout_sec: 10
+  systemctl_show:
+    name: systemctl_show
+    argv: [systemctl, show, "{unit}", "--property=ActiveState,SubState,MainPID,NRestarts"]
+    timeout_sec: 10
+  systemctl_restart:
+    name: systemctl_restart
+    argv: [systemctl, restart, "{unit}"]
+    timeout_sec: 60

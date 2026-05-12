@@ -19,3 +19,7 @@ safety:
   default_restart_enabled: false
   default_kill_enabled: false
   dedupe_window_sec: 1800
+
+host_executor:
+  enabled: true
+  policy_path: /opt/doghouse/config/executor-policy.yaml

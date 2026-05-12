@@ -33,6 +33,7 @@ class ServiceCheckResult(BaseModel):
     endpoints: dict[str, EndpointCheckResult] = Field(default_factory=dict)
     diagnostics: dict[str, Any] | None = None
     incident: dict[str, Any] | None = None
+    action: dict[str, Any] | None = None
     previous_state_path: str | None = None
     state_path: str | None = None
 

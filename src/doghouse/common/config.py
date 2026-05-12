@@ -34,11 +34,17 @@ class SafetyConfig(BaseModel):
     dedupe_window_sec: int = 1800
 
 
+class HostExecutorConfig(BaseModel):
+    enabled: bool = False
+    policy_path: str = "/opt/doghouse/config/executor-policy.yaml"
+
+
 class DoghouseConfig(BaseModel):
     api: ApiConfig = Field(default_factory=ApiConfig)
     scheduler: SchedulerConfig = Field(default_factory=SchedulerConfig)
     paths: PathsConfig = Field(default_factory=PathsConfig)
     safety: SafetyConfig = Field(default_factory=SafetyConfig)
+    host_executor: HostExecutorConfig = Field(default_factory=HostExecutorConfig)
 
 
 def load_config(path: str | os.PathLike[str]) -> DoghouseConfig:

@@ -10,6 +10,9 @@ from doghouse.audit.checker import run_audit
 from doghouse.common.config import load_config_from_env
 from doghouse.common.service_config import load_services
 from doghouse.devtask_watchdog.checker import check_devtasks
+from doghouse.host_executor.executor import execute_host_action
+from doghouse.shadow.checker import shadow_once
+from doghouse.cutover.manager import cutover_service
 from doghouse.service_watchdog.checker import check_service
 
 
@@ -34,6 +37,14 @@ def main() -> int:
     devtasks = sub.add_parser("check-devtasks")
     devtasks.add_argument("--active-work-url", default=None)
     sub.add_parser("audit")
+    executor = sub.add_parser("executor")
+    executor.add_argument("service_id")
+    executor.add_argument("action")
+    executor.add_argument("--execute", action="store_true", help="actually run the whitelisted action; default is dry-run")
+    sub.add_parser("shadow-once")
+    cutover = sub.add_parser("cutover-service")
+    cutover.add_argument("service_id")
+    cutover.add_argument("--execute", action="store_true", help="actually disable the old watchdog timer; default is dry-run")
     args = parser.parse_args()
 
     if args.command == "check-service":
@@ -43,6 +54,19 @@ def main() -> int:
         return 0
     if args.command == "audit":
         print(json.dumps(run_audit(load_config_from_env(), persist=True), indent=2, sort_keys=True))
+        return 0
+    if args.command == "executor":
+        services = load_services("/opt/doghouse/config/services.d") or load_services("config/services.d")
+        selected = [s for s in services if s.service_id == args.service_id]
+        if not selected:
+            raise SystemExit(f"unknown service_id: {args.service_id}")
+        print(json.dumps(execute_host_action(args.action, selected[0], dry_run=not args.execute).as_dict(), indent=2, sort_keys=True))
+        return 0
+    if args.command == "shadow-once":
+        print(json.dumps(shadow_once(load_config_from_env(), persist=True), indent=2, sort_keys=True))
+        return 0
+    if args.command == "cutover-service":
+        print(json.dumps(cutover_service(args.service_id, load_config_from_env(), dry_run=not args.execute), indent=2, sort_keys=True))
         return 0
 
     cfg = load_config_from_env()

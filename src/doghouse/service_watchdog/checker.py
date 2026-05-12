@@ -7,6 +7,8 @@ import httpx
 
 from doghouse.common.config import DoghouseConfig, load_config_from_env
 from doghouse.common.service_config import ServiceConfig
+from doghouse.devtask_watchdog.checker import check_devtasks
+from doghouse.host_executor.executor import execute_host_action
 from doghouse.service_watchdog.diagnostics import collect_diagnostics
 from doghouse.service_watchdog.incidents import maybe_write_incident
 from doghouse.service_watchdog.state import (
@@ -68,7 +70,7 @@ def classify(service: ServiceConfig, endpoints: dict[str, EndpointCheckResult], 
         if liveness_failures >= threshold:
             return (
                 "liveness_failed_threshold_met",
-                f"live endpoint failed {liveness_failures}/{threshold} consecutive checks; report-only, no restart executed",
+                f"live endpoint failed {liveness_failures}/{threshold} consecutive checks; restart policy evaluation required",
                 liveness_failures,
             )
         return (
@@ -114,6 +116,7 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
     classification, reason, failures = classify(service, endpoint_results, previous)
     diagnostics = None
     incident = None
+    action = None
     if classification not in {"healthy", "not_configured"}:
         diagnostics = collect_diagnostics(service)
     result = ServiceCheckResult(
@@ -131,10 +134,21 @@ def check_service(service: ServiceConfig, config: DoghouseConfig | None = None, 
         previous_state_path=str(path) if path.exists() else None,
         state_path=str(path),
         diagnostics=diagnostics,
+        action=action,
     )
     if persist:
         incident = maybe_write_incident(service, result, config, diagnostics)
         if incident is not None:
             result.incident = incident
+        if classification == "liveness_failed_threshold_met":
+            if service.policy.report_only or not service.policy.restart_enabled:
+                result.action = {"action": "systemctl_restart", "executed": False, "reason": "report-only or restart disabled"}
+            elif service.policy.active_task_guard:
+                devtasks = check_devtasks(config, persist=True)
+                active = [task for task in devtasks.get("tasks", []) if task.get("classification") in {"active", "idle", "stuck", "orphaned", "unknown"}]
+                if active:
+                    result.action = {"action": "systemctl_restart", "executed": False, "reason": "active task guard deferred restart", "active_task_count": len(active)}
+            if result.action is None:
+                result.action = execute_host_action("systemctl_restart", service, policy_path=config.host_executor.policy_path).as_dict()
         write_state_atomic(path, result.model_dump(mode="json"))
     return result

@@ -1,0 +1,11 @@
+[Unit]
+Description=Run Doghouse watchdog v2 shadow comparison every minute
+
+[Timer]
+OnBootSec=120s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=doghouse-shadow.service
+
+[Install]
+WantedBy=timers.target

@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: Phase 0 through Phase 5 completed in repo. No production watchdog cutover happens until explicitly approved.
+Status: Phase 0 through Phase 8 implemented in repo. Hermes is prepared as the first cutover service; production timer enablement requires live-lane root approval/handoff.
 
 ## Phase 0 — repository and skeleton
 
@@ -75,20 +75,20 @@ Status: Phase 0 through Phase 5 completed in repo. No production watchdog cutove
 
 ## Phase 7 — shadow mode
 
-1. Run Doghouse beside current watchdog.
-2. Compare old watchdog behavior with v2 report-only decisions.
-3. Write migration report.
-4. Fix mismatches.
-5. Do not cut over yet.
+1. Run Doghouse beside current watchdog. Completed via `doghouse shadow-once` plus `doghouse-shadow.service/timer` units in `deploy/systemd/`.
+2. Compare old watchdog behavior with v2 report-only decisions. Completed in `shadow_once` report output.
+3. Write migration report. Completed under `state_dir/shadow/last-shadow-report.json` and incident JSON snapshots.
+4. Fix mismatches. Current Hermes mismatch is resolved by using `/health` as the temporary liveness source until native `/live` exists; OpenClaw remains report-only under old watchdog.
+5. Do not cut over yet. Completed before Phase 8 precheck.
 
 ## Phase 8 — service-by-service cutover
 
-1. Pick one service.
-2. Verify rollback command.
-3. Explicitly enable restart for that service only after approval.
-4. Disable old timer for that service.
-5. Monitor.
-6. Roll back if needed.
+1. Pick one service. Hermes selected first because OpenClaw health is currently connection-refused and remains in old-watchdog mode.
+2. Verify rollback command. Hermes rollback: `systemctl enable --now watchdog-hermes.timer`.
+3. Explicitly enable restart for that service only after approval. Hermes config now has `report_only: false` and `restart_enabled: true`; kill remains disabled.
+4. Disable old timer for that service. Cutover manager supports this with `doghouse cutover-service hermes --execute`; live execution requires root/live-lane approval.
+5. Monitor. Use `systemctl list-timers 'doghouse*' 'watchdog-*' --all --no-pager`, `journalctl -u doghouse-check@hermes.service`, and `doghouse shadow-once`.
+6. Roll back if needed. Run `systemctl enable --now watchdog-hermes.timer` and `systemctl disable --now doghouse-check@hermes.timer`.
 
 ## Safety defaults
 
@@ -97,4 +97,4 @@ Status: Phase 0 through Phase 5 completed in repo. No production watchdog cutove
 - Restart disabled by default.
 - Kill disabled by default.
 - Host executor absent until Phase 5.
-- Current live watchdog remains untouched.
+- current production watchdog remains service-by-service during cutover
