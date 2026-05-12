@@ -1,0 +1,23 @@
+service_id: hermes
+display_name: Hermes Gateway
+runtime:
+  type: systemd
+  unit: hermes.service
+endpoints:
+  live: http://127.0.0.1:8080/live
+  ready: http://127.0.0.1:8080/ready
+  health: http://127.0.0.1:8080/health
+  active_work: http://127.0.0.1:8080/watchdog/active-work
+policy:
+  report_only: true
+  restart_enabled: false
+  kill_enabled: false
+  failure_threshold: 3
+  timeout_sec: 10
+  startup_grace_sec: 90
+  restart_settle_sec: 15
+  active_task_guard: true
+  active_task_query_failure_policy: defer
+incidents:
+  enabled: true
+  dedupe_window_sec: 1800

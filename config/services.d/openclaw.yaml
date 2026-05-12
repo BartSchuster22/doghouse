@@ -1,0 +1,21 @@
+service_id: openclaw
+display_name: OpenClaw Gateway
+runtime:
+  type: systemd
+  unit: openclaw.service
+endpoints:
+  health: http://127.0.0.1:8081/health
+policy:
+  report_only: true
+  restart_enabled: false
+  kill_enabled: false
+  failure_threshold: 3
+  timeout_sec: 10
+  startup_grace_sec: 90
+  restart_settle_sec: 15
+  active_task_guard: false
+extra_checks:
+  - id: telegram_bot
+    type: command
+    restart_grade: false
+    degraded_threshold: 3

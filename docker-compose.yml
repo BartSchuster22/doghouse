@@ -1,0 +1,14 @@
+services:
+  doghouse:
+    build: .
+    container_name: doghouse
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      DOGHOUSE_CONFIG: /app/config/watchdog.yaml
+    volumes:
+      - ./config:/app/config:ro
+      - /srv/shared-memory/state/watchdog-v2:/state:rw
+      - /srv/shared-memory/logs/watchdog-v2:/logs:rw
+      - /srv/shared-memory/incidents/open:/incidents:rw
+      - /srv/shared-memory/checkpoints/interrupted-tasks:/checkpoints:rw

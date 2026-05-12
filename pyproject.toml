@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "doghouse"
+version = "0.1.0"
+description = "Watchdog v2: local API-first watchdog platform"
+requires-python = ">=3.11"
+dependencies = [
+  "fastapi>=0.110,<1",
+  "uvicorn[standard]>=0.27,<1",
+  "pydantic>=2.6,<3",
+  "PyYAML>=6,<7",
+  "httpx>=0.26,<1",
+]
+
+[project.scripts]
+doghouse = "doghouse.main:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
