@@ -261,3 +261,13 @@ Status: Phase 0 through Phase 20 implemented in repo. Hermes and OpenClaw are cu
 
 - Corrected OpenClaw `active_work` endpoint mode to `not_supported`; the previous route returned frontend HTML, not JSON active-work data.
 - Doghouse still uses local devtask heartbeat files for active-task guard until OpenClaw exposes native JSON `/watchdog/active-work`.
+
+## Phase 31 — QA 10/10 final
+
+- Added incident reconciliation so false-open/resolved records are archived without deleting evidence.
+- Fixed shadow mode to stop writing healthy shadow reports into incidents/open.
+- Added CLI: `doghouse incident-reconcile`.
+- Added API: `POST /api/v1/incidents/reconcile`.
+- Final QA command: `DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml doghouse qa-gate --threshold 10`.
+- Evidence: `/srv/shared-memory/state/watchdog-v2/qa/latest-qa-gate.json`.
+- Result: pass, 10.0/10.

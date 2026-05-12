@@ -5,6 +5,7 @@ from doghouse.common.service_config import ServiceConfig, ServicePolicy, Runtime
 from doghouse.drills import restart as restart_mod
 from doghouse.security.review import run_security_review
 from doghouse.host_executor.policy import ExecutorActionPolicy, ExecutorPolicy
+from doghouse.service_watchdog import reconcile as reconcile_mod
 
 
 def test_security_review_passes_hardened_executor_policy(tmp_path, monkeypatch):
@@ -75,3 +76,18 @@ def test_restart_drill_dry_run_pass(monkeypatch, tmp_path):
     report = restart_mod.run_restart_drill("openclaw", cfg, execute=False, persist=True)
     assert report["status"] == "dry_run_pass"
     assert (tmp_path / "state/drills/latest-restart-drill.json").exists()
+
+
+def test_incident_reconcile_archives_false_open_shadow_reports(monkeypatch, tmp_path):
+    incident_dir = tmp_path / "incidents" / "open"
+    incident_dir.mkdir(parents=True)
+    (incident_dir / "20260512T010101Z-doghouse-shadow-report.json").write_text('{"status":"ok"}\n', encoding="utf-8")
+    monkeypatch.setattr(reconcile_mod, "load_services", lambda *_: [])
+    monkeypatch.setattr(reconcile_mod, "shadow_once", lambda *a, **k: {"status": "ok"})
+    cfg = DoghouseConfig(paths=PathsConfig(state_dir=str(tmp_path / "state"), incident_dir=str(incident_dir)))
+    report = reconcile_mod.reconcile_open_incidents(cfg, persist=True)
+    assert report["status"] == "ok"
+    assert report["actions_count"] == 1
+    assert report["remaining_open_count"] == 0
+    assert not (incident_dir / "20260512T010101Z-doghouse-shadow-report.json").exists()
+    assert (tmp_path / "state/shadow/archive/misfiled-open-incidents/20260512T010101Z-doghouse-shadow-report.json").exists()

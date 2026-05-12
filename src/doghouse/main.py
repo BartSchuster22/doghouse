@@ -20,6 +20,7 @@ from doghouse.shadow.checker import shadow_once
 from doghouse.soak.report import generate_soak_report
 from doghouse.cutover.manager import cutover_service
 from doghouse.service_watchdog.checker import check_service
+from doghouse.service_watchdog.reconcile import reconcile_open_incidents
 from doghouse.readiness.openclaw import check_openclaw_readiness
 from doghouse.drills.restart import run_restart_drill
 
@@ -81,6 +82,7 @@ def main() -> int:
     drill.add_argument("--reason", default=None)
     drill.add_argument("--settle-sec", type=int, default=15)
     sub.add_parser("security-review")
+    sub.add_parser("incident-reconcile")
     sub.add_parser("release-candidate")
     cutover = sub.add_parser("cutover-service")
     cutover.add_argument("service_id")
@@ -139,6 +141,10 @@ def main() -> int:
         report = run_security_review(load_config_from_env(), persist=True)
         print(json.dumps(report, indent=2, sort_keys=True))
         return 0 if report.get("status") == "pass" else 2
+    if args.command == "incident-reconcile":
+        report = reconcile_open_incidents(load_config_from_env(), persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") == "ok" else 2
     if args.command == "release-candidate":
         report = build_release_candidate(load_config_from_env(), persist=True)
         print(json.dumps(report, indent=2, sort_keys=True))

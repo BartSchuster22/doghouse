@@ -64,5 +64,6 @@ def shadow_once(config: DoghouseConfig | None = None, services_dir: str | Path |
     result = {"checked_at": utc_now_iso(), "status": status, "mode": "shadow", "items": items}
     if persist:
         _atomic_write(Path(config.paths.state_dir) / "shadow" / "last-shadow-report.json", result)
-        _atomic_write(Path(config.paths.incident_dir) / f"{utc_now_iso().replace(':','').replace('-','')}-doghouse-shadow-report.json", result)
+        if status != "ok":
+            _atomic_write(Path(config.paths.incident_dir) / f"{utc_now_iso().replace(':','').replace('-','')}-doghouse-shadow-attention.json", result)
     return result
