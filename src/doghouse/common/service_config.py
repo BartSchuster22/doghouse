@@ -43,6 +43,7 @@ class ServiceConfig(BaseModel):
     display_name: str
     runtime: RuntimeConfig = Field(default_factory=RuntimeConfig)
     endpoints: dict[str, str] = Field(default_factory=dict)
+    endpoint_modes: dict[str, Literal["native", "legacy_fallback", "not_supported"]] = Field(default_factory=dict)
     policy: ServicePolicy = Field(default_factory=ServicePolicy)
     incidents: IncidentPolicy = Field(default_factory=IncidentPolicy)
     extra_checks: list[ExtraCheckConfig] = Field(default_factory=list)

@@ -11,6 +11,8 @@ from doghouse.common.config import load_config_from_env
 from doghouse.common.service_config import load_services
 from doghouse.devtask_watchdog.checker import check_devtasks
 from doghouse.host_executor.executor import execute_host_action
+from doghouse.evidence.daily import generate_daily_evidence
+from doghouse.qa.gate import run_qa_gate
 from doghouse.shadow.checker import shadow_once
 from doghouse.soak.report import generate_soak_report
 from doghouse.cutover.manager import cutover_service
@@ -45,6 +47,11 @@ def main() -> int:
     sub.add_parser("shadow-once")
     soak = sub.add_parser("soak-report")
     soak.add_argument("--since", default="24h")
+    qa = sub.add_parser("qa-gate")
+    qa.add_argument("--threshold", type=float, default=8.0)
+    evidence = sub.add_parser("daily-evidence")
+    evidence.add_argument("--since", default="24h")
+    evidence.add_argument("--threshold", type=float, default=8.0)
     cutover = sub.add_parser("cutover-service")
     cutover.add_argument("service_id")
     cutover.add_argument("--execute", action="store_true", help="actually disable the old watchdog timer; default is dry-run")
@@ -71,6 +78,14 @@ def main() -> int:
     if args.command == "soak-report":
         print(json.dumps(generate_soak_report(load_config_from_env(), since=args.since, persist=True), indent=2, sort_keys=True))
         return 0
+    if args.command == "qa-gate":
+        report = run_qa_gate(load_config_from_env(), threshold=args.threshold, persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") == "pass" else 2
+    if args.command == "daily-evidence":
+        report = generate_daily_evidence(load_config_from_env(), since=args.since, threshold=args.threshold, persist=True)
+        print(json.dumps(report, indent=2, sort_keys=True))
+        return 0 if report.get("status") == "pass" else 2
     if args.command == "cutover-service":
         print(json.dumps(cutover_service(args.service_id, load_config_from_env(), dry_run=not args.execute), indent=2, sort_keys=True))
         return 0

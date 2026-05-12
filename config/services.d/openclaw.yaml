@@ -4,9 +4,15 @@ runtime:
   type: systemd
   unit: openclaw.service
 endpoints:
-  live: http://127.0.0.1:18789/health
+  live: http://127.0.0.1:18789/live
   ready: http://127.0.0.1:18789/ready
   health: http://127.0.0.1:18789/health
+  active_work: http://127.0.0.1:18789/watchdog/active-work
+endpoint_modes:
+  live: native
+  ready: native
+  health: native
+  active_work: native
 policy:
   report_only: false
   restart_enabled: true

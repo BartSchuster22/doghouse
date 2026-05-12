@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate Doghouse watchdog v2 daily evidence bundle
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/opt/doghouse
+Environment=DOGHOUSE_CONFIG=/opt/doghouse/config/local.yaml
+ExecStart=/opt/doghouse/.venv/bin/python -m doghouse.main daily-evidence --since 24h --threshold 8
+User=root

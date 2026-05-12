@@ -1,6 +1,6 @@
 # Doghouse / Watchdog v2 build steps
 
-Status: Phase 0 through Phase 16 implemented in repo. Hermes and OpenClaw are cut over to Doghouse timers; old service watchdog timers are disabled and rollback commands are documented.
+Status: Phase 0 through Phase 20 implemented in repo. Hermes and OpenClaw are cut over to Doghouse timers; old service watchdog timers are disabled and rollback commands are documented.
 
 ## Phase 0 — repository and skeleton
 
@@ -147,11 +147,38 @@ Status: Phase 0 through Phase 16 implemented in repo. Hermes and OpenClaw are cu
 1. Add `docs/operator-runbook.md`.
 2. Document status checks, timer checks, API checks, host executor use, devtask heartbeat schema, incident/state paths, and rollback commands.
 
+## Phase 17 — QA 8/10 gate
+
+1. Add `doghouse qa-gate --threshold 8`.
+2. Add API endpoints `GET /api/v1/qa/gate` and `POST /api/v1/qa/gate/run`.
+3. Score service health, audit, shadow, scheduler freshness, path writability, executor hardening, devtask freshness, kill-disabled safety, restart actions, and incidents.
+4. Persist latest QA evidence under `state_dir/qa/latest-qa-gate.json`.
+
+## Phase 18 — soak automation and daily evidence
+
+1. Add `doghouse daily-evidence --since 24h --threshold 8`.
+2. Add API endpoints `GET /api/v1/qa/evidence/daily` and `POST /api/v1/qa/evidence/daily/run`.
+3. Add `doghouse-daily-evidence.service` and `doghouse-daily-evidence.timer` templates.
+4. Persist JSON and Markdown evidence under `state_dir/evidence/`.
+
+## Phase 19 — test suite hardening
+
+1. Add pytest optional dependency and pytest configuration.
+2. Add tests for classification, soak window parsing, endpoint mode parsing, QA gate persistence, and daily evidence persistence.
+3. Keep tests non-destructive and local-only.
+
+## Phase 20 — native endpoint split
+
+1. Add endpoint mode metadata: `native`, `legacy_fallback`, `not_supported`.
+2. Switch OpenClaw liveness to native `/live` and add native active-work endpoint.
+3. Mark Hermes `/live` and `/ready` as legacy fallback to `/health` until Hermes exposes native endpoints.
+4. Document split endpoint state in `docs/phase-17-20-evidence.md`.
+
 ## Safety defaults
 
 - API binds to `127.0.0.1`.
 - Report-only by default.
 - Restart disabled by default.
 - Kill disabled by default.
-- Host executor absent until Phase 5.
-- current production watchdog remains service-by-service during cutover
+- Host executor restricted to whitelist-only actions.
+- Current production watchdog rollback timers remain installed but disabled after service-by-service cutover.

@@ -15,8 +15,17 @@ dependencies = [
   "httpx>=0.26,<1",
 ]
 
+[project.optional-dependencies]
+test = [
+  "pytest>=8,<9",
+]
+
 [project.scripts]
 doghouse = "doghouse.main:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
 
 [tool.setuptools.packages.find]
 where = ["src"]

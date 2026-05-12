@@ -1,0 +1,11 @@
+[Unit]
+Description=Generate Doghouse watchdog v2 daily evidence once per day
+
+[Timer]
+OnCalendar=*-*-* 06:10:00 UTC
+Persistent=true
+AccuracySec=60s
+Unit=doghouse-daily-evidence.service
+
+[Install]
+WantedBy=timers.target

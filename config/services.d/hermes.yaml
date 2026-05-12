@@ -8,6 +8,11 @@ endpoints:
   ready: http://127.0.0.1:8080/health
   health: http://127.0.0.1:8080/health
   active_work: http://127.0.0.1:8080/watchdog/active-work
+endpoint_modes:
+  live: legacy_fallback
+  ready: legacy_fallback
+  health: native
+  active_work: not_supported
 policy:
   report_only: false
   restart_enabled: true
