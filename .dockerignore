@@ -1,0 +1,60 @@
+# VCS and editor metadata
+.git
+.gitignore
+.gitattributes
+*.swp
+*.swo
+.DS_Store
+
+# Python environments, caches, and packaging/build artifacts
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+.eggs/
+.cache/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+.nox/
+.coverage
+coverage.xml
+htmlcov/
+
+# Local configuration/secrets should be bind-mounted, not baked into images
+.env
+.env.*
+*.local
+
+# Doghouse/shared runtime state must stay on host volumes
+state/
+logs/
+log/
+incidents/
+checkpoints/
+checkpoint*/
+reports/
+evidence/
+artifacts/
+shared-memory/
+srv/shared-memory/
+/srv/shared-memory/
+*.log
+*.pid
+*.sqlite
+*.sqlite3
+*.db
+*.checkpoint
+*.ckpt
+
+# Repository-local Docker/runtime scratch
+docker-compose.override.yml
+.docker/

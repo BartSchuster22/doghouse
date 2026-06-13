@@ -22,6 +22,7 @@ test = [
 
 [project.scripts]
 doghouse = "doghouse.main:main"
+doghouse-worker = "doghouse.worker:main"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

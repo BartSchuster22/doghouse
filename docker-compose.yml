@@ -1,14 +1,38 @@
 services:
-  doghouse:
+  doghouse-api:
     build: .
-    container_name: doghouse
+    container_name: doghouse-api
     restart: unless-stopped
     network_mode: host
     environment:
-      DOGHOUSE_CONFIG: /app/config/watchdog.yaml
+      DOGHOUSE_CONFIG: /app/config/local.yaml
+      PYTHONUNBUFFERED: "1"
     volumes:
       - ./config:/app/config:ro
-      - /srv/shared-memory/state/watchdog-v2:/state:rw
-      - /srv/shared-memory/logs/watchdog-v2:/logs:rw
-      - /srv/shared-memory/incidents/open:/incidents:rw
-      - /srv/shared-memory/checkpoints/interrupted-tasks:/checkpoints:rw
+      - /srv/shared-memory/state/watchdog-v2:/srv/shared-memory/state/watchdog-v2:rw
+      - /srv/shared-memory/logs/watchdog-v2:/srv/shared-memory/logs/watchdog-v2:rw
+      - /srv/shared-memory/incidents/open:/srv/shared-memory/incidents/open:rw
+      - /srv/shared-memory/checkpoints/interrupted-tasks:/srv/shared-memory/checkpoints/interrupted-tasks:rw
+    command: ["doghouse", "serve"]
+    healthcheck:
+      test: ["CMD-SHELL", "python - <<'PY'\nimport urllib.request\nurllib.request.urlopen('http://127.0.0.1:18793/health', timeout=3)\nPY"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  doghouse-worker:
+    build: .
+    container_name: doghouse-worker
+    restart: unless-stopped
+    network_mode: host
+    environment:
+      DOGHOUSE_CONFIG: /app/config/local.yaml
+      PYTHONUNBUFFERED: "1"
+    volumes:
+      - ./config:/app/config:ro
+      - /srv/shared-memory/state/watchdog-v2:/srv/shared-memory/state/watchdog-v2:rw
+      - /srv/shared-memory/logs/watchdog-v2:/srv/shared-memory/logs/watchdog-v2:rw
+      - /srv/shared-memory/incidents/open:/srv/shared-memory/incidents/open:rw
+      - /srv/shared-memory/checkpoints/interrupted-tasks:/srv/shared-memory/checkpoints/interrupted-tasks:rw
+    command: ["doghouse", "worker"]

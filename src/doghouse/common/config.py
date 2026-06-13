@@ -18,6 +18,14 @@ class SchedulerConfig(BaseModel):
     service_interval_sec: int = 60
     devtask_interval_sec: int = 60
     audit_interval_sec: int = 300
+    notification_interval_sec: int = 300
+    notification_sweep_interval_sec: int = 900
+    shadow_interval_sec: int = 300
+    incident_reconcile_interval_sec: int = 300
+    openclaw_readiness_interval_sec: int = 300
+    daily_evidence_interval_sec: int = 86400
+    daily_evidence_utc_hour: int = 6
+    daily_evidence_utc_minute: int = 10
 
 
 class PathsConfig(BaseModel):

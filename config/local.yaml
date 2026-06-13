@@ -7,6 +7,11 @@ scheduler:
   service_interval_sec: 60
   devtask_interval_sec: 60
   audit_interval_sec: 300
+  notification_interval_sec: 300
+  shadow_interval_sec: 300
+  incident_reconcile_interval_sec: 300
+  openclaw_readiness_interval_sec: 300
+  daily_evidence_interval_sec: 86400
 
 paths:
   state_dir: /srv/shared-memory/state/watchdog-v2

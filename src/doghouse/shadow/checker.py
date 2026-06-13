@@ -27,6 +27,14 @@ def _systemctl_is_enabled(unit: str) -> str:
         return f"error:{type(exc).__name__}:{exc}"
 
 
+def _systemctl_is_active(unit: str) -> str:
+    try:
+        cp = subprocess.run(["systemctl", "is-active", unit], text=True, capture_output=True, timeout=10, check=False)
+        return (cp.stdout or cp.stderr).strip() or f"rc={cp.returncode}"
+    except Exception as exc:
+        return f"error:{type(exc).__name__}:{exc}"
+
+
 def shadow_once(config: DoghouseConfig | None = None, services_dir: str | Path | None = None, persist: bool = True) -> dict[str, Any]:
     config = config or load_config_from_env()
     root = Path(services_dir or ("/opt/doghouse/config/services.d" if Path("/opt/doghouse/config/services.d").exists() else "config/services.d"))
@@ -36,11 +44,14 @@ def shadow_once(config: DoghouseConfig | None = None, services_dir: str | Path |
         result = check_service(service, config, persist=True)
         old_timer = f"watchdog-{service.service_id}.timer"
         old_enabled = _systemctl_is_enabled(old_timer)
-        old_active = subprocess.run(["systemctl", "is-active", old_timer], text=True, capture_output=True, timeout=10, check=False)
+        old_active = _systemctl_is_active(old_timer)
         doghouse_would_restart = result.classification == "liveness_failed_threshold_met"
         old_watchdog_present = Path(f"/etc/systemd/system/{old_timer}").exists()
         mismatch = False
         notes = []
+        systemctl_unavailable = old_enabled.startswith("error:FileNotFoundError") or old_active.startswith("error:FileNotFoundError")
+        if systemctl_unavailable:
+            notes.append("systemctl unavailable")
         if doghouse_would_restart and service.policy.report_only:
             notes.append("doghouse would restart only if report_only=false and restart_enabled=true")
         if old_watchdog_present and "enabled" in old_enabled and service.policy.restart_enabled:
@@ -56,11 +67,12 @@ def shadow_once(config: DoghouseConfig | None = None, services_dir: str | Path |
             "old_timer": old_timer,
             "old_timer_file_exists": old_watchdog_present,
             "old_timer_enabled": old_enabled,
-            "old_timer_active": (old_active.stdout or old_active.stderr).strip() or f"rc={old_active.returncode}",
+            "old_timer_active": old_active,
+            "systemctl_available": not systemctl_unavailable,
             "mismatch": mismatch,
             "notes": notes,
         })
-    status = "attention" if any(item["mismatch"] for item in items) else "ok"
+    status = "attention" if any(item["mismatch"] or not item["systemctl_available"] for item in items) else "ok"
     result = {"checked_at": utc_now_iso(), "status": status, "mode": "shadow", "items": items}
     if persist:
         _atomic_write(Path(config.paths.state_dir) / "shadow" / "last-shadow-report.json", result)

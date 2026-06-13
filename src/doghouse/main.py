@@ -23,6 +23,7 @@ from doghouse.service_watchdog.checker import check_service
 from doghouse.service_watchdog.reconcile import reconcile_open_incidents
 from doghouse.readiness.openclaw import check_openclaw_readiness
 from doghouse.drills.restart import run_restart_drill
+from doghouse.worker import main as worker_main
 
 
 def run_check(service_id: str | None) -> int:
@@ -87,6 +88,11 @@ def main() -> int:
     cutover = sub.add_parser("cutover-service")
     cutover.add_argument("service_id")
     cutover.add_argument("--execute", action="store_true", help="actually disable the old watchdog timer; default is dry-run")
+    worker = sub.add_parser("worker")
+    worker.add_argument("--once", action="store_true")
+    worker.add_argument("--only", default=None)
+    worker.add_argument("--dry-run", action="store_true")
+    worker.add_argument("--print-schedule", action="store_true")
     args = parser.parse_args()
 
     if args.command == "check-service":
@@ -152,6 +158,17 @@ def main() -> int:
     if args.command == "cutover-service":
         print(json.dumps(cutover_service(args.service_id, load_config_from_env(), dry_run=not args.execute), indent=2, sort_keys=True))
         return 0
+    if args.command == "worker":
+        worker_argv = []
+        if args.once:
+            worker_argv.append("--once")
+        if args.only:
+            worker_argv.extend(["--only", args.only])
+        if args.dry_run:
+            worker_argv.append("--dry-run")
+        if args.print_schedule:
+            worker_argv.append("--print-schedule")
+        return worker_main(worker_argv)
 
     cfg = load_config_from_env()
     uvicorn.run(create_app(), host=cfg.api.bind, port=cfg.api.port)

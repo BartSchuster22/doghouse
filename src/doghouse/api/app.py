@@ -38,6 +38,10 @@ def create_app() -> FastAPI:
     app.include_router(security_router)
     app.include_router(release_router)
 
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
     @app.get("/api/v1/status")
     def status() -> dict:
         config = load_config_from_env()
