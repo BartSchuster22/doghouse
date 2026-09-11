@@ -20,10 +20,7 @@ MAX_REQUEST=4096
 
 def digest(p):return hashlib.sha256(p.read_bytes()).hexdigest()
 
-def signature(row):
-    config={k:row['Config'].get(k) for k in ('Image','Entrypoint','Cmd','User','Healthcheck','WorkingDir','Env','Labels')}
-    host={k:row['HostConfig'].get(k) for k in ('Privileged','CapAdd','CapDrop','ReadonlyRootfs','SecurityOpt','NetworkMode','PidMode','IpcMode','PortBindings','RestartPolicy')}
-    return hashlib.sha256(json.dumps([config,host],sort_keys=True,separators=(',',':')).encode()).hexdigest()
+from .identity import legacy_signature as signature, canonical_signature, SCHEMA as IDENTITY_SCHEMA
 
 def trusted(path):
     p=Path(path)
@@ -57,6 +54,7 @@ class Broker:
         self.root=trusted(self.c['root']);self.cell=self.c['cell']
         if not re.fullmatch(r'dsh2-stage[0-9]+-qa[0-9]+',self.cell):raise Rejected('invalid-cell')
         if set(self.c['images'])!=set(SERVICES):raise Rejected('invalid-pins')
+        if self.c.get('signatureSchema') not in (None,IDENTITY_SCHEMA):raise Rejected('unsupported-signature-schema')
         self.op=self.root/'operations'
         self.e=Engine(self.op/'ops.db')
         # A previous atomic write interrupted before rename cannot replace status.
@@ -79,7 +77,8 @@ class Broker:
             labels=row['Config']['Labels']
             if row['Name']!='/'+self.cell+'-'+service+'-1' or row['Image']!=self.c['images'][service]:raise Rejected('image-or-name-mismatch')
             if labels.get('com.docker.compose.project')!=self.cell or labels.get('com.alica.stage2')!=self.cell:raise Rejected('label-mismatch')
-            if signature(row)!=self.c['signatures'][service]:raise Rejected('runtime-config-mismatch')
+            fingerprint=canonical_signature if self.c.get('signatureSchema')==IDENTITY_SCHEMA else signature
+            if fingerprint(row)!=self.c['signatures'][service]:raise Rejected('runtime-config-mismatch')
             expected=self.c['mounts'][service]
             actual=sorted([(m['Type'],m['Source'],m['Destination'],m['RW']) for m in row['Mounts']])
             if [list(x) for x in actual]!=expected:raise Rejected('mount-mismatch')
@@ -105,11 +104,10 @@ class Broker:
                 data=next(m['Source'] for m in self.rows['hermes']['Mounts'] if m['Destination']=='/opt/data')
                 path=Path(data)/'kanban.db'
                 if path.is_symlink() or not path.resolve().is_relative_to(Path(data).resolve()):raise OSError('unsafe-native-db')
-                db=sqlite3.connect('file:'+str(path)+'?mode=ro',uri=True,timeout=1)
-                db.execute('PRAGMA query_only=ON')
-                counts=dict(db.execute("SELECT CASE WHEN status IN ('todo','in_progress','blocked','done','archived') THEN status ELSE 'other' END AS bucket,COUNT(*) FROM tasks GROUP BY bucket"))
-                db.close();work.update(counts=counts,active=sum(v for k,v in counts.items() if k not in ('done','archived')),observed=True)
-            except (OSError,sqlite3.Error,StopIteration):pass
+                from .native_observation import read_counts
+                counts=read_counts(self.run,self.cell)
+                work.update(counts=counts,active=sum(v for k,v in counts.items() if k not in ('done','archived')),observed=True)
+            except (OSError,sqlite3.Error,StopIteration,ValueError,Rejected,subprocess.TimeoutExpired):pass
         mem={x.split(':')[0]:int(x.split()[1])*1024 for x in Path('/proc/meminfo').read_text().splitlines()}
         free=shutil.disk_usage(trusted(self.c['storagePath'])).free
         snap={'observedAt':now,'bootId':Path('/proc/sys/kernel/random/boot_id').read_text().strip(),
